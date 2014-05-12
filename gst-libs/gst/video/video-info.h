@@ -170,7 +170,7 @@ void         gst_video_info_set_format  (GstVideoInfo *info, GstVideoFormat form
 
 gboolean     gst_video_info_from_caps   (GstVideoInfo *info, const GstCaps  * caps);
 
-GstCaps *    gst_video_info_to_caps     (GstVideoInfo *info);
+GstCaps *    gst_video_info_to_caps     (const GstVideoInfo *info);
 
 gboolean     gst_video_info_convert     (GstVideoInfo *info,
                                          GstFormat     src_format,

@@ -323,7 +323,7 @@ gst_video_info_is_equal (const GstVideoInfo * info, const GstVideoInfo * other)
  * Returns: a new #GstCaps containing the info of @info.
  */
 GstCaps *
-gst_video_info_to_caps (GstVideoInfo * info)
+gst_video_info_to_caps (const GstVideoInfo * info)
 {
   GstCaps *caps;
   const gchar *format;
