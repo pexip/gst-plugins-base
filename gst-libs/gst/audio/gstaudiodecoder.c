@@ -1128,7 +1128,7 @@ gst_audio_decoder_finish_frame (GstAudioDecoder * dec, GstBuffer * buf,
 {
   GstAudioDecoderPrivate *priv;
   GstAudioDecoderContext *ctx;
-  gint samples = 0;
+  gint f, samples = 0;
   GstClockTime ts, next_ts;
   gsize size;
   GstFlowReturn ret = GST_FLOW_OK;
@@ -1197,12 +1197,6 @@ gst_audio_decoder_finish_frame (GstAudioDecoder * dec, GstBuffer * buf,
 
   GST_DEBUG_OBJECT (dec, "leading frame ts %" GST_TIME_FORMAT,
       GST_TIME_ARGS (ts));
-
-  while (priv->frames.length && frames) {
-    gst_buffer_unref (g_queue_pop_head (&priv->frames));
-    dec->priv->ctx.delay = dec->priv->frames.length;
-    frames--;
-  }
 
   if (G_UNLIKELY (!buf))
     goto exit;
@@ -1274,6 +1268,11 @@ gst_audio_decoder_finish_frame (GstAudioDecoder * dec, GstBuffer * buf,
   priv->samples += samples;
   priv->samples_out += samples;
 
+  /* FIXME: May not want to copy all meta */
+  for (f = 0; f < frames; f++)
+    gst_buffer_copy_into (buf, g_queue_peek_nth (&priv->frames, f),
+        GST_BUFFER_COPY_META, 0, -1);
+
   /* we got data, so note things are looking up */
   if (G_UNLIKELY (dec->priv->error_count))
     dec->priv->error_count = 0;
@@ -1281,6 +1280,11 @@ gst_audio_decoder_finish_frame (GstAudioDecoder * dec, GstBuffer * buf,
   ret = gst_audio_decoder_output (dec, buf);
 
 exit:
+  while (priv->frames.length && frames) {
+    gst_buffer_unref (g_queue_pop_head (&priv->frames));
+    dec->priv->ctx.delay = dec->priv->frames.length;
+    frames--;
+  }
 
   GST_AUDIO_DECODER_STREAM_UNLOCK (dec);
 

@@ -230,6 +230,8 @@ struct _GstAudioEncoderPrivate
   gboolean discont;
   /* to guess duration of drained data */
   GstClockTime last_duration;
+  /* last input buffer recevied to copy meta */
+  GstBuffer * last_input_buffer;
 
   /* subclass provided data in processing round */
   gboolean got_data;
@@ -497,6 +499,7 @@ gst_audio_encoder_reset (GstAudioEncoder * enc, gboolean full)
   enc->priv->base_gp = -1;
   enc->priv->samples = 0;
   enc->priv->discont = FALSE;
+  gst_buffer_replace (&enc->priv->last_input_buffer, NULL);
 
   GST_AUDIO_ENCODER_STREAM_UNLOCK (enc);
 }
@@ -507,6 +510,7 @@ gst_audio_encoder_finalize (GObject * object)
   GstAudioEncoder *enc = GST_AUDIO_ENCODER (object);
 
   g_object_unref (enc->priv->adapter);
+  gst_buffer_replace (&enc->priv->last_input_buffer, NULL);
 
   g_rec_mutex_clear (&enc->stream_lock);
 
@@ -784,6 +788,11 @@ gst_audio_encoder_finish_frame (GstAudioEncoder * enc, GstBuffer * buf,
           priv->discont = FALSE;
         }
 
+        /* FIXME: May not want to copy all meta */
+        if (priv->last_input_buffer)
+          gst_buffer_copy_into (tmpbuf, priv->last_input_buffer,
+              GST_BUFFER_COPY_META, 0, -1);
+
         /* Ogg codecs like Vorbis use offset/offset-end in a special
          * way and both should be 0 for these codecs */
         if (priv->base_gp >= 0) {
@@ -850,6 +859,11 @@ gst_audio_encoder_finish_frame (GstAudioEncoder * enc, GstBuffer * buf,
       GST_BUFFER_FLAG_SET (buf, GST_BUFFER_FLAG_DISCONT);
       priv->discont = FALSE;
     }
+
+    /* FIXME: May not want to copy all meta */
+    if (priv->last_input_buffer)
+      gst_buffer_copy_into (buf, priv->last_input_buffer,
+          GST_BUFFER_COPY_META, 0, -1);
 
     if (klass->pre_push) {
       /* last chance for subclass to do some dirty stuff */
@@ -1205,11 +1219,14 @@ gst_audio_encoder_chain (GstPad * pad, GstObject * parent, GstBuffer * buffer)
     }
   }
 
+  gst_buffer_replace (&enc->priv->last_input_buffer, buffer);
   gst_adapter_push (enc->priv->adapter, buffer);
+
   /* new stuff, so we can push subclass again */
   enc->priv->drained = FALSE;
 
   ret = gst_audio_encoder_push_buffers (enc, FALSE);
+  gst_buffer_replace (&enc->priv->last_input_buffer, NULL);
 
 done:
   GST_LOG_OBJECT (enc, "chain leaving");
