@@ -291,7 +291,9 @@ GST_DEBUG_CATEGORY (videodecoder_debug);
 #define DEFAULT_QOS                 TRUE
 #define DEFAULT_MAX_ERRORS          GST_VIDEO_DECODER_MAX_ERRORS
 #define DEFAULT_MIN_FORCE_KEY_UNIT_INTERVAL 0
-#define DEFAULT_DISCARD_CORRUPTED_FRAMES FALSE
+#define DEFAULT_DISCARD_CORRUPTED_FRAMES  FALSE
+#define DEFAULT_ERROR_DROP_FRAME          FALSE
+#define DEFAULT_ERROR_STATE               GST_VIDEO_DECODER_OK
 
 /* Used for request_sync_point_frame_number. These are out of range for the
  * frame numbers and can be given special meaning */
@@ -304,7 +306,11 @@ enum
   PROP_QOS,
   PROP_MAX_ERRORS,
   PROP_MIN_FORCE_KEY_UNIT_INTERVAL,
-  PROP_DISCARD_CORRUPTED_FRAMES
+  PROP_DISCARD_CORRUPTED_FRAMES,
+  PROP_REQUEST_KEY_UNIT_INTERVAL,
+  PROP_ERROR_DROP_FRAME,
+  PROP_ERROR_STATE,
+  PROP_LAST
 };
 
 struct _GstVideoDecoderPrivate
@@ -341,6 +347,11 @@ struct _GstVideoDecoderPrivate
   /* TRUE if we have an active set of instant rate flags */
   gboolean decode_flags_override;
   GstSegmentFlags decode_flags;
+
+  gboolean error_drop_frame;
+  gint req_keyunit_interval;
+  GstClockTime wait_for_sync;
+  GstVideoDecoderErrorState decode_error;
 
   /* ... being tracked here;
    * only available during parsing */
@@ -570,6 +581,7 @@ gst_video_decoder_class_init (GstVideoDecoderClass * klass)
   gobject_class->get_property = gst_video_decoder_get_property;
   gobject_class->set_property = gst_video_decoder_set_property;
 
+
   gstelement_class->change_state =
       GST_DEBUG_FUNCPTR (gst_video_decoder_change_state);
 
@@ -646,6 +658,26 @@ gst_video_decoder_class_init (GstVideoDecoderClass * klass)
           DEFAULT_DISCARD_CORRUPTED_FRAMES,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class,
+      PROP_REQUEST_KEY_UNIT_INTERVAL,
+      g_param_spec_int ("request-key-unit-interval",
+          "Request key-unit interval",
+          "Interval to request key-units on decode errors (in ms, -1 no requests, 0 all requests)",
+          -1, G_MAXINT, DEFAULT_REQUEST_KEY_UNIT_INTERVAL,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_ERROR_DROP_FRAME,
+      g_param_spec_boolean ("error-drop-frame",
+          "Error drop frame", "Drop frames on error",
+          DEFAULT_ERROR_DROP_FRAME,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_ERROR_STATE,
+      g_param_spec_int ("error-state", "Error State",
+          "The error state of the decoder (read-only)", GST_VIDEO_DECODER_OK,
+          GST_VIDEO_DECODER_LAST_ERROR_STATE - 1, DEFAULT_ERROR_STATE,
+          G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+
   meta_tag_video_quark = g_quark_from_static_string (GST_META_TAG_VIDEO_STR);
 }
 
@@ -699,6 +731,8 @@ gst_video_decoder_init (GstVideoDecoder * decoder, GstVideoDecoderClass * klass)
 
   /* properties */
   decoder->priv->do_qos = DEFAULT_QOS;
+  decoder->priv->error_drop_frame = DEFAULT_ERROR_DROP_FRAME;
+  decoder->priv->req_keyunit_interval = DEFAULT_REQUEST_KEY_UNIT_INTERVAL;
 
   decoder->priv->min_latency = 0;
   decoder->priv->max_latency = 0;
@@ -921,6 +955,15 @@ gst_video_decoder_get_property (GObject * object, guint property_id,
     case PROP_DISCARD_CORRUPTED_FRAMES:
       g_value_set_boolean (value, priv->discard_corrupted_frames);
       break;
+    case PROP_REQUEST_KEY_UNIT_INTERVAL:
+      g_value_set_int (value, priv->req_keyunit_interval);
+      break;
+    case PROP_ERROR_DROP_FRAME:
+      g_value_set_boolean (value, priv->error_drop_frame);
+      break;
+    case PROP_ERROR_STATE:
+      g_value_set_int (value, priv->decode_error);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -946,6 +989,11 @@ gst_video_decoder_set_property (GObject * object, guint property_id,
       break;
     case PROP_DISCARD_CORRUPTED_FRAMES:
       priv->discard_corrupted_frames = g_value_get_boolean (value);
+    case PROP_REQUEST_KEY_UNIT_INTERVAL:
+      priv->req_keyunit_interval = g_value_get_int (value);
+      break;
+    case PROP_ERROR_DROP_FRAME:
+      priv->error_drop_frame = g_value_get_boolean (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
@@ -1119,6 +1167,41 @@ gst_video_decoder_drain_out (GstVideoDecoder * dec, gboolean at_eos)
   }
 
   return ret;
+}
+
+void
+gst_video_decoder_clear_decode_error (GstVideoDecoder * decoder)
+{
+  GST_DEBUG_OBJECT (decoder, "clear decode error");
+
+  decoder->priv->wait_for_sync = GST_CLOCK_TIME_NONE;
+  decoder->priv->decode_error = GST_VIDEO_DECODER_OK;
+}
+
+void
+gst_video_decoder_report_decode_error (GstVideoDecoder * decoder,
+    GstClockTime ts, GstVideoDecoderErrorState state)
+{
+  decoder->priv->decode_error = state;
+
+  GST_DEBUG_OBJECT (decoder, "set decode error, %u, %" GST_TIME_FORMAT,
+      state, GST_TIME_ARGS (ts));
+  if (state != GST_VIDEO_DECODER_FORCE_KEY_UNIT) {
+    if (decoder->priv->req_keyunit_interval == -1)
+      return;
+    if (decoder->priv->req_keyunit_interval != 0 &&
+        GST_CLOCK_TIME_IS_VALID (decoder->priv->wait_for_sync) &&
+        GST_CLOCK_DIFF (decoder->priv->wait_for_sync, ts) <
+        decoder->priv->req_keyunit_interval * GST_MSECOND)
+      return;
+  }
+
+  decoder->priv->wait_for_sync = ts;
+  GST_INFO_OBJECT (decoder, "upstream force key unit, %" GST_TIME_FORMAT,
+      GST_TIME_ARGS (ts));
+  gst_pad_push_event (decoder->sinkpad,
+      gst_video_event_new_upstream_force_key_unit (GST_CLOCK_TIME_NONE,
+          TRUE, 1));
 }
 
 static GList *
@@ -1331,6 +1414,13 @@ gst_video_decoder_sink_event_default (GstVideoDecoder * decoder,
       if (decoder->input_segment.flags & GST_SEEK_FLAG_TRICKMODE_KEY_UNITS)
         flow_ret = gst_video_decoder_drain_out (decoder, FALSE);
       ret = (flow_ret == GST_FLOW_OK);
+
+      if (decoder->priv->req_keyunit_interval > -1) {
+        GstClockTime ts;
+        gst_event_parse_gap (event, &ts, NULL);
+        gst_video_decoder_report_decode_error (decoder, ts,
+            GST_VIDEO_DECODER_GAP);
+      }
 
       /* Ensure we have caps before forwarding the event */
       if (!decoder->priv->output_state) {
@@ -2212,9 +2302,10 @@ gst_video_decoder_reset (GstVideoDecoder * decoder, gboolean full,
     priv->pending_events = NULL;
 
     priv->error_count = 0;
-    priv->max_errors = GST_VIDEO_DECODER_MAX_ERRORS;
     priv->had_output_data = FALSE;
     priv->had_input_data = FALSE;
+
+    priv->wait_for_sync = GST_CLOCK_TIME_NONE;
 
     GST_OBJECT_LOCK (decoder);
     priv->earliest_time = GST_CLOCK_TIME_NONE;
@@ -2847,6 +2938,19 @@ gst_video_decoder_prepare_finish_frame (GstVideoDecoder *
     gst_video_decoder_push_event_list (decoder, events);
   }
 
+  if (G_UNLIKELY (GST_CLOCK_TIME_IS_VALID (decoder->priv->wait_for_sync))) {
+    if (sync) {
+      gst_video_decoder_clear_decode_error (decoder);
+    } else {
+      if (GST_CLOCK_TIME_IS_VALID (frame->pts))
+        gst_video_decoder_report_decode_error (decoder, frame->pts,
+            decoder->priv->decode_error);
+
+      if (decoder->priv->error_drop_frame)
+        GST_VIDEO_CODEC_FRAME_SET_DECODE_ONLY (frame);
+    }
+  }
+
   /* Check if the data should not be displayed. For example altref/invisible
    * frame in vp8. In this case we should not update the timestamps. */
   if (GST_VIDEO_CODEC_FRAME_IS_DECODE_ONLY (frame))
@@ -3459,7 +3563,7 @@ gst_video_decoder_clip_and_push_buf (GstVideoDecoder * decoder, GstBuffer * buf)
   }
 #endif
 
-  /* release STREAM_LOCK not to block upstream 
+  /* release STREAM_LOCK not to block upstream
    * while pushing buffer downstream */
   GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
   ret = gst_pad_push (decoder->srcpad, buf);
