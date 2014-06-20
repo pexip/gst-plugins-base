@@ -162,6 +162,16 @@ G_STMT_START {                                                              \
 #define GST_VIDEO_DECODER_MAX_ERRORS     10
 
 
+typedef enum _GstVideoDecoderErrorState {
+  GST_VIDEO_DECODER_OK = 0,
+  GST_VIDEO_DECODER_GAP,
+  GST_VIDEO_DECODER_DISCONT,
+  GST_VIDEO_DECODER_CORRUPTION,
+  GST_VIDEO_DECODER_BITSTREAM_FAULT,
+  GST_VIDEO_DECODER_FORCE_KEY_UNIT,
+  GST_VIDEO_DECODER_LAST_ERROR_STATE
+} GstVideoDecoderErrorState;
+
 /**
  * GstVideoDecoder:
  *
@@ -415,6 +425,11 @@ GstCaps *        gst_video_decoder_proxy_getcaps (GstVideoDecoder * decoder,
 						  GstCaps         * caps,
                                                   GstCaps         * filter);
 
+void             gst_video_decoder_report_decode_error (GstVideoDecoder * decoder,
+                                                        GstClockTime ts,
+                                                        GstVideoDecoderErrorState state);
+
+void             gst_video_decoder_clear_decode_error (GstVideoDecoder * decoder);
 
 G_END_DECLS
 
