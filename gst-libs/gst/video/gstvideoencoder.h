@@ -354,6 +354,9 @@ void		     gst_video_encoder_get_latency (GstVideoEncoder *encoder,
 GST_EXPORT
 void                 gst_video_encoder_set_headers (GstVideoEncoder *encoder,
 						    GList *headers);
+void                 gst_video_encoder_set_keyframe_rate_limit (GstVideoEncoder *encoder,
+						    GstClockTime limit);
+
 
 GST_EXPORT
 void                 gst_video_encoder_merge_tags  (GstVideoEncoder *encoder,
