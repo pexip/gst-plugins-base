@@ -161,6 +161,16 @@ G_STMT_START {                                                              \
 #define GST_VIDEO_DECODER_MAX_ERRORS     10
 
 
+typedef enum _GstVideoDecoderErrorState {
+  GST_VIDEO_DECODER_OK = -1,
+  GST_VIDEO_DECODER_GAP = 0,
+  GST_VIDEO_DECODER_DISCONT,
+  GST_VIDEO_DECODER_CORRUPTION,
+  GST_VIDEO_DECODER_BITSTREAM_FAULT,
+  GST_VIDEO_DECODER_FORCE_KEY_UNIT,
+  GST_VIDEO_DECODER_LAST_ERROR_STATE
+} GstVideoDecoderErrorState;
+
 /**
  * GstVideoDecoder:
  *
@@ -395,6 +405,11 @@ void             gst_video_decoder_release_frame (GstVideoDecoder * dec,
 void             gst_video_decoder_merge_tags (GstVideoDecoder *decoder,
                                                const GstTagList *tags,
                                                GstTagMergeMode mode);
+
+void             gst_video_decoder_report_decode_error (GstVideoDecoder * decoder,
+                                                        GstClockTime ts,
+                                                        GstVideoDecoderErrorState state);
+void             gst_video_decoder_clear_decode_error (GstVideoDecoder * decoder);
 
 G_END_DECLS
 

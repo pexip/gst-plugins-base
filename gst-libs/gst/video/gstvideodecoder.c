@@ -339,8 +339,10 @@ struct _GstVideoDecoderPrivate
   gboolean needs_format;
   gboolean do_caps;
 
+  gboolean error_drop_frame;
   GstClockTime req_keyunit_interval;
   GstClockTime wait_for_sync;
+  GstVideoDecoderErrorState decode_error;
 
   /* ... being tracked here;
    * only available during parsing */
@@ -414,11 +416,13 @@ struct _GstVideoDecoderPrivate
 };
 
 #define DEFAULT_REQUEST_KEY_UNIT_INTERVAL 0
+#define DEFAULT_ERROR_DROP_FRAME          FALSE
 
 enum
 {
   PROP_0,
   PROP_REQUEST_KEY_UNIT_INTERVAL,
+  PROP_ERROR_DROP_FRAME,
   PROP_LAST
 };
 
@@ -536,6 +540,11 @@ gst_video_decoder_class_init (GstVideoDecoderClass * klass)
           0, G_MAXUINT64, DEFAULT_REQUEST_KEY_UNIT_INTERVAL,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class, PROP_ERROR_DROP_FRAME,
+      g_param_spec_boolean ("error-drop-frame",
+        "Error drop frame", "Drop frames on error",
+        DEFAULT_ERROR_DROP_FRAME, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   gstelement_class->change_state =
       GST_DEBUG_FUNCPTR (gst_video_decoder_change_state);
 
@@ -593,6 +602,7 @@ gst_video_decoder_init (GstVideoDecoder * decoder, GstVideoDecoderClass * klass)
   decoder->priv->output_adapter = gst_adapter_new ();
   decoder->priv->packetized = TRUE;
   decoder->priv->needs_format = FALSE;
+  decoder->priv->error_drop_frame = DEFAULT_ERROR_DROP_FRAME;
   decoder->priv->req_keyunit_interval = DEFAULT_REQUEST_KEY_UNIT_INTERVAL;
 
   gst_video_decoder_reset (decoder, TRUE, TRUE);
@@ -607,6 +617,9 @@ gst_video_decoder_set_property (GObject * object, guint prop_id,
   switch (prop_id) {
     case PROP_REQUEST_KEY_UNIT_INTERVAL:
       dec->priv->req_keyunit_interval = g_value_get_uint64 (value);
+      break;
+    case PROP_ERROR_DROP_FRAME:
+      dec->priv->error_drop_frame = g_value_get_boolean (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -623,6 +636,9 @@ gst_video_decoder_get_property (GObject * object, guint prop_id, GValue * value,
   switch (prop_id) {
     case PROP_REQUEST_KEY_UNIT_INTERVAL:
       g_value_set_uint64 (value, dec->priv->req_keyunit_interval);
+      break;
+    case PROP_ERROR_DROP_FRAME:
+      g_value_set_boolean (value, dec->priv->error_drop_frame);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1036,6 +1052,39 @@ gst_video_decoder_drain_out (GstVideoDecoder * dec, gboolean at_eos)
   return ret;
 }
 
+void
+gst_video_decoder_clear_decode_error (GstVideoDecoder * decoder)
+{
+  GST_DEBUG_OBJECT (decoder, "CLEAR decode error");
+
+  decoder->priv->wait_for_sync = GST_CLOCK_TIME_NONE;
+  decoder->priv->decode_error = GST_VIDEO_DECODER_OK;
+}
+
+void
+gst_video_decoder_report_decode_error (GstVideoDecoder * decoder,
+    GstClockTime ts, GstVideoDecoderErrorState state)
+{
+  decoder->priv->decode_error = state;
+
+  GST_DEBUG_OBJECT (decoder, "set decode error, %u, %"GST_TIME_FORMAT,
+      state, GST_TIME_ARGS (ts));
+  if (state != GST_VIDEO_DECODER_FORCE_KEY_UNIT) {
+    if (decoder->priv->req_keyunit_interval == 0)
+      return;
+    if (GST_CLOCK_TIME_IS_VALID (decoder->priv->wait_for_sync) &&
+        GST_CLOCK_DIFF (decoder->priv->wait_for_sync, ts) < decoder->priv->req_keyunit_interval)
+      return;
+  }
+
+  decoder->priv->wait_for_sync = ts;
+  GST_INFO_OBJECT (decoder, "upstream force key unit, %"GST_TIME_FORMAT,
+      GST_TIME_ARGS (ts));
+  gst_pad_push_event (decoder->sinkpad,
+      gst_video_event_new_upstream_force_key_unit (GST_CLOCK_TIME_NONE,
+          TRUE, 1));
+}
+
 static GList *
 _flush_events (GstPad * pad, GList * events)
 {
@@ -1125,17 +1174,13 @@ gst_video_decoder_sink_event_default (GstVideoDecoder * decoder,
     case GST_EVENT_GAP:
     {
       GstFlowReturn flow_ret = GST_FLOW_OK;
+      GstClockTime ts;
 
       flow_ret = gst_video_decoder_drain_out (decoder, FALSE);
       ret = (flow_ret == GST_FLOW_OK);
 
-      if (decoder->priv->req_keyunit_interval > 0 &&
-          !GST_CLOCK_TIME_IS_VALID (decoder->priv->wait_for_sync)) {
-        gst_event_parse_gap (event, &decoder->priv->wait_for_sync, NULL);
-        gst_pad_push_event (decoder->sinkpad,
-            gst_video_event_new_upstream_force_key_unit (GST_CLOCK_TIME_NONE,
-              TRUE, 1));
-      }
+      gst_event_parse_gap (event, &ts, NULL);
+      gst_video_decoder_report_decode_error (decoder, ts, GST_VIDEO_DECODER_GAP);
 
       /* Forward GAP immediately. Everything is drained after
        * the GAP event and we can forward this event immediately
@@ -1912,13 +1957,8 @@ gst_video_decoder_chain_forward (GstVideoDecoder * decoder,
   if (priv->packetized) {
     if (GST_BUFFER_IS_DISCONT (buf)) {
       GST_DEBUG_OBJECT (decoder, "DISCONT buf");
-      if (decoder->priv->req_keyunit_interval > 0 &&
-          !GST_CLOCK_TIME_IS_VALID (decoder->priv->wait_for_sync)) {
-        decoder->priv->wait_for_sync = GST_BUFFER_PTS (buf);
-        gst_pad_push_event (decoder->sinkpad,
-            gst_video_event_new_upstream_force_key_unit (GST_CLOCK_TIME_NONE,
-              TRUE, 1));
-      }
+      gst_video_decoder_report_decode_error (decoder, GST_BUFFER_PTS (buf),
+          GST_VIDEO_DECODER_DISCONT);
     }
     if (!GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_DELTA_UNIT)) {
       GST_VIDEO_CODEC_FRAME_SET_SYNC_POINT (priv->current_frame);
@@ -2434,13 +2474,14 @@ gst_video_decoder_prepare_finish_frame (GstVideoDecoder *
 
   if (G_UNLIKELY (GST_CLOCK_TIME_IS_VALID (decoder->priv->wait_for_sync))) {
     if (sync) {
-      decoder->priv->wait_for_sync = GST_CLOCK_TIME_NONE;
-    } else if (GST_CLOCK_TIME_IS_VALID (frame->pts) && decoder->priv->wait_for_sync < frame->pts &&
-        frame->pts - decoder->priv->wait_for_sync > decoder->priv->req_keyunit_interval) {
-      decoder->priv->wait_for_sync = frame->pts;
-      gst_pad_push_event (decoder->sinkpad,
-          gst_video_event_new_upstream_force_key_unit (GST_CLOCK_TIME_NONE,
-            TRUE, 1));
+      gst_video_decoder_clear_decode_error (decoder);
+    } else {
+      if (GST_CLOCK_TIME_IS_VALID (frame->pts))
+        gst_video_decoder_report_decode_error (decoder, frame->pts,
+            decoder->priv->decode_error);
+
+      if (decoder->priv->error_drop_frame)
+        GST_VIDEO_CODEC_FRAME_SET_DECODE_ONLY (frame);
     }
   }
 
