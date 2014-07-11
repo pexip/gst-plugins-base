@@ -215,6 +215,9 @@ GstBuffer*      gst_rtcp_buffer_new_copy_data     (gpointer data, guint len);
 gboolean        gst_rtcp_buffer_validate_data     (guint8 *data, guint len);
 gboolean        gst_rtcp_buffer_validate          (GstBuffer *buffer);
 
+gboolean        gst_rtcp_buffer_validate_data_rsize (guint8 *data, guint len);
+gboolean        gst_rtcp_buffer_validate_rsize      (GstBuffer *buffer);
+
 GstBuffer*      gst_rtcp_buffer_new               (guint mtu);
 
 gboolean        gst_rtcp_buffer_map               (GstBuffer *buffer, GstMapFlags flags, GstRTCPBuffer *rtcp);

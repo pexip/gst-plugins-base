@@ -1158,6 +1158,9 @@ gst_rtcp_buffer_new_copy_data
 gst_rtcp_buffer_validate_data
 gst_rtcp_buffer_validate
 
+gst_rtcp_buffer_validate_rsize_data
+gst_rtcp_buffer_validate_rsize
+
 GstRTCPBuffer
 GST_RTCP_BUFFER_INIT
 gst_rtcp_buffer_new

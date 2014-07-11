@@ -87,20 +87,8 @@ gst_rtcp_buffer_new_copy_data (gpointer data, guint len)
   return gst_rtcp_buffer_new_take_data (g_memdup (data, len), len);
 }
 
-/**
- * gst_rtcp_buffer_validate_data:
- * @data: (array length=len): the data to validate
- * @len: the length of @data to validate
- *
- * Check if the @data and @size point to the data of a valid RTCP (compound)
- * packet. 
- * Use this function to validate a packet before using the other functions in
- * this module.
- *
- * Returns: TRUE if the data points to a valid RTCP packet.
- */
-gboolean
-gst_rtcp_buffer_validate_data (guint8 * data, guint len)
+static gboolean
+gst_rtcp_buffer_validate_data_internal (guint8 * data, guint len, gboolean rsize)
 {
   guint16 header_mask;
   guint header_len;
@@ -115,10 +103,12 @@ gst_rtcp_buffer_validate_data (guint8 * data, guint len)
   if (G_UNLIKELY (len < 4))
     goto wrong_length;
 
-  /* first packet must be RR or SR  and version must be 2 */
   header_mask = ((data[0] << 8) | data[1]) & GST_RTCP_VALID_MASK;
-  if (G_UNLIKELY (header_mask != GST_RTCP_VALID_VALUE))
-    goto wrong_mask;
+  if (G_LIKELY (!rsize)) {
+    /* first packet must be RR or SR  and version must be 2 */
+    if (G_UNLIKELY (header_mask != GST_RTCP_VALID_VALUE))
+      goto wrong_mask;
+  }
 
   /* no padding when mask succeeds */
   padding = FALSE;
@@ -186,6 +176,24 @@ wrong_padding:
 }
 
 /**
+ * gst_rtcp_buffer_validate_data:
+ * @data: (array length=len): the data to validate
+ * @len: the length of @data to validate
+ *
+ * Check if the @data and @size point to the data of a valid RTCP (compound)
+ * packet. 
+ * Use this function to validate a packet before using the other functions in
+ * this module.
+ *
+ * Returns: TRUE if the data points to a valid RTCP packet.
+ */
+gboolean
+gst_rtcp_buffer_validate_data (guint8 * data, guint len)
+{
+  return gst_rtcp_buffer_validate_data_internal (data, len, FALSE);
+}
+
+/**
  * gst_rtcp_buffer_validate:
  * @buffer: the buffer to validate
  *
@@ -204,6 +212,48 @@ gst_rtcp_buffer_validate (GstBuffer * buffer)
 
   gst_buffer_map (buffer, &map, GST_MAP_READ);
   res = gst_rtcp_buffer_validate_data (map.data, map.size);
+  gst_buffer_unmap (buffer, &map);
+
+  return res;
+}
+
+/**
+ * gst_rtcp_buffer_validate_data_rsize:
+ * @data: (array length=len): the data to validate
+ * @len: the length of @data to validate
+ *
+ * Check if the @data and @size point to the data of a valid
+ * RTCP (reduced size) packet.
+ * Use this function to validate a packet before using the other functions in
+ * this module.
+ *
+ * Returns: TRUE if the data points to a valid RTCP packet.
+ */
+gboolean
+gst_rtcp_buffer_validate_data_rsize (guint8 * data, guint len)
+{
+  return gst_rtcp_buffer_validate_data_internal (data, len, TRUE);
+}
+
+/**
+ * gst_rtcp_buffer_validate_rsize:
+ * @buffer: the buffer to validate
+ *
+ * Check if the data pointed to by @buffer is a valid RTCP packet using
+ * gst_rtcp_buffer_validate_data_rsize().
+ *
+ * Returns: TRUE if @buffer is a valid RTCP packet.
+ */
+gboolean
+gst_rtcp_buffer_validate_rsize (GstBuffer * buffer)
+{
+  gboolean res;
+  GstMapInfo map;
+
+  g_return_val_if_fail (GST_IS_BUFFER (buffer), FALSE);
+
+  gst_buffer_map (buffer, &map, GST_MAP_READ);
+  res = gst_rtcp_buffer_validate_data_rsize (map.data, map.size);
   gst_buffer_unmap (buffer, &map);
 
   return res;
