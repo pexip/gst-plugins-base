@@ -796,6 +796,63 @@ GST_START_TEST (test_rtcp_reduced_buffer)
 
 GST_END_TEST;
 
+GST_START_TEST (test_rtcp_buffer_profile_specific_extension)
+{
+  GstBuffer *buf;
+  GstRTCPBuffer rtcp = GST_RTCP_BUFFER_INIT;
+  GstRTCPPacket packet;
+  const guint8 pse[] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77 };
+
+  fail_unless ((buf = gst_rtcp_buffer_new (1400)) != NULL);
+  gst_rtcp_buffer_map (buf, GST_MAP_READWRITE, &rtcp);
+
+  fail_unless (gst_rtcp_buffer_validate (buf) == FALSE);
+  fail_unless (gst_rtcp_buffer_get_first_packet (&rtcp, &packet) == FALSE);
+  fail_unless (gst_rtcp_buffer_get_packet_count (&rtcp) == 0);
+
+  /* add an SR packet with sender info */
+  fail_unless (gst_rtcp_buffer_add_packet (&rtcp, GST_RTCP_TYPE_SR, &packet));
+  gst_rtcp_packet_sr_set_sender_info (&packet, 0x44556677,
+      G_GUINT64_CONSTANT (1), 0x11111111, 101, 123456);
+  fail_unless_equals_int (0,
+      gst_rtcp_packet_get_profile_specific_ext_len (&packet));
+  fail_unless_equals_int (6, gst_rtcp_packet_get_length (&packet));
+
+  /* add profile-specific extension */
+  fail_unless (gst_rtcp_packet_set_profile_specific_ext (&packet,
+          pse, sizeof (pse)));
+  {
+    guint8 * data = NULL;
+    guint len = 0;
+
+    fail_unless_equals_int (8, gst_rtcp_packet_get_length (&packet));
+    fail_unless_equals_int (sizeof (pse) / sizeof (guint32),
+        gst_rtcp_packet_get_profile_specific_ext_len (&packet));
+
+    /* gst_rtcp_packet_get_profile_specific_ext */
+    fail_unless (gst_rtcp_packet_get_profile_specific_ext (&packet, &data, &len));
+    fail_unless_equals_int (sizeof (pse), len);
+    fail_unless (data != NULL);
+    fail_unless_equals_int (0,
+        memcmp (pse, data, sizeof (pse)));
+
+    /* gst_rtcp_packet_copy_profile_specific_ext */
+    fail_unless (gst_rtcp_packet_copy_profile_specific_ext (&packet, &data, &len));
+    fail_unless_equals_int (sizeof (pse), len);
+    fail_unless (data != NULL);
+    fail_unless_equals_int (0,
+        memcmp (pse, data, sizeof (pse)));
+    g_free (data);
+  }
+
+  /* close and validate */
+  gst_rtcp_buffer_unmap (&rtcp);
+  fail_unless (gst_rtcp_buffer_validate (buf) == TRUE);
+  gst_buffer_unref (buf);
+}
+
+GST_END_TEST;
+
 GST_START_TEST (test_rtp_ntp64_extension)
 {
   GstBuffer *buf;
@@ -1027,6 +1084,7 @@ rtp_suite (void)
 
   tcase_add_test (tc_chain, test_rtcp_buffer);
   tcase_add_test (tc_chain, test_rtcp_reduced_buffer);
+  tcase_add_test (tc_chain, test_rtcp_buffer_profile_specific_extension);
   tcase_add_test (tc_chain, test_rtp_ntp64_extension);
   tcase_add_test (tc_chain, test_rtp_ntp56_extension);
 
