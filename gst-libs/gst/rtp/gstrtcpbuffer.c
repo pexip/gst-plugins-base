@@ -1098,11 +1098,11 @@ gst_rtcp_packet_get_profile_specific_ext_len (GstRTCPPacket * packet)
 {
   guint pse_offset = 2;
 
-  g_return_if_fail (packet != NULL);
-  g_return_if_fail (packet->type == GST_RTCP_TYPE_RR ||
-      packet->type == GST_RTCP_TYPE_SR);
-  g_return_if_fail (packet->rtcp != NULL);
-  g_return_if_fail (packet->rtcp->map.flags & GST_MAP_READ);
+  g_return_val_if_fail (packet != NULL, 0);
+  g_return_val_if_fail (packet->type == GST_RTCP_TYPE_RR ||
+      packet->type == GST_RTCP_TYPE_SR, 0);
+  g_return_val_if_fail (packet->rtcp != NULL, 0);
+  g_return_val_if_fail (packet->rtcp->map.flags & GST_MAP_READ, 0);
 
   if (packet->type == GST_RTCP_TYPE_SR)
     pse_offset += 5;
@@ -1129,11 +1129,11 @@ gst_rtcp_packet_get_profile_specific_ext (GstRTCPPacket * packet,
 {
   guint16 pse_len;
 
-  g_return_if_fail (packet != NULL);
-  g_return_if_fail (packet->type == GST_RTCP_TYPE_RR ||
-      packet->type == GST_RTCP_TYPE_SR);
-  g_return_if_fail (packet->rtcp != NULL);
-  g_return_if_fail (packet->rtcp->map.flags & GST_MAP_READ);
+  g_return_val_if_fail (packet != NULL, FALSE);
+  g_return_val_if_fail (packet->type == GST_RTCP_TYPE_RR ||
+      packet->type == GST_RTCP_TYPE_SR, FALSE);
+  g_return_val_if_fail (packet->rtcp != NULL, FALSE);
+  g_return_val_if_fail (packet->rtcp->map.flags & GST_MAP_READ, FALSE);
 
   pse_len = gst_rtcp_packet_get_profile_specific_ext_len (packet);
   if (pse_len > 0) {
@@ -1168,11 +1168,11 @@ gst_rtcp_packet_copy_profile_specific_ext (GstRTCPPacket * packet,
 {
   guint16 pse_len;
 
-  g_return_if_fail (packet != NULL);
-  g_return_if_fail (packet->type == GST_RTCP_TYPE_RR ||
-      packet->type == GST_RTCP_TYPE_SR);
-  g_return_if_fail (packet->rtcp != NULL);
-  g_return_if_fail (packet->rtcp->map.flags & GST_MAP_READ);
+  g_return_val_if_fail (packet != NULL, FALSE);
+  g_return_val_if_fail (packet->type == GST_RTCP_TYPE_RR ||
+      packet->type == GST_RTCP_TYPE_SR, FALSE);
+  g_return_val_if_fail (packet->rtcp != NULL, FALSE);
+  g_return_val_if_fail (packet->rtcp->map.flags & GST_MAP_READ, FALSE);
 
   pse_len = gst_rtcp_packet_get_profile_specific_ext_len (packet);
   if (pse_len > 0) {
