@@ -1754,6 +1754,7 @@ gst_audio_decoder_chain (GstPad * pad, GstObject * parent, GstBuffer * buffer)
 {
   GstAudioDecoder *dec;
   GstFlowReturn ret;
+  gboolean act_on_discont = TRUE;
 
   dec = GST_AUDIO_DECODER (parent);
 
@@ -1776,7 +1777,16 @@ gst_audio_decoder_chain (GstPad * pad, GstObject * parent, GstBuffer * buffer)
 
   dec->priv->ctx.had_input_data = TRUE;
 
-  if (GST_BUFFER_FLAG_IS_SET (buffer, GST_BUFFER_FLAG_DISCONT)) {
+  if (dec->priv->plc && dec->priv->ctx.do_plc) {
+    /* Do not act on discont if the last buffer we received was from a gap
+     * event. */
+    GstBuffer * last_buffer = g_queue_peek_tail (&dec->priv->frames);
+    if (last_buffer != NULL)
+      act_on_discont = gst_buffer_get_size (last_buffer) > 0;
+  }
+
+  if (act_on_discont &&
+      GST_BUFFER_FLAG_IS_SET (buffer, GST_BUFFER_FLAG_DISCONT)) {
     gint64 samples, ts;
 
     /* track present position */
