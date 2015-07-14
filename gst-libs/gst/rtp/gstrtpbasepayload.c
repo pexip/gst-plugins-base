@@ -82,7 +82,7 @@ enum
 #define DEFAULT_SEQNUM_OFFSET           -1
 #define DEFAULT_MAX_PTIME               -1
 #define DEFAULT_MIN_PTIME               0
-#define DEFAULT_PERFECT_RTPTIME         TRUE
+#define DEFAULT_PERFECT_RTPTIME         FALSE
 #define DEFAULT_PTIME_MULTIPLE          0
 #define DEFAULT_RUNNING_TIME            GST_CLOCK_TIME_NONE
 
