@@ -1048,10 +1048,14 @@ gst_rtcp_packet_set_rb (GstRTCPPacket * packet, guint nth, guint32 ssrc,
  * @data: (array length=len) (transfer none): profile-specific data
  * @len: length of the profile-specific data in bytes
  *
+ * Add profile-specific extension @data to @packet. If @packet already
+ * contains profile-specific extension @data will be appended to the existing
+ * extension.
+ *
  * Returns: %TRUE if the profile specific extension data was added.
  */
 gboolean
-gst_rtcp_packet_set_profile_specific_ext (GstRTCPPacket * packet,
+gst_rtcp_packet_add_profile_specific_ext (GstRTCPPacket * packet,
     const guint8 * data, guint len)
 {
   guint8 *bdata;
@@ -1062,27 +1066,20 @@ gst_rtcp_packet_set_profile_specific_ext (GstRTCPPacket * packet,
       packet->type == GST_RTCP_TYPE_SR, FALSE);
   g_return_val_if_fail (packet->rtcp != NULL, FALSE);
   g_return_val_if_fail (packet->rtcp->map.flags & GST_MAP_WRITE, FALSE);
-  g_return_val_if_fail ((len % sizeof (guint32)) == 0, FALSE);
+  g_return_val_if_fail ((len & 0x03) == 0, FALSE);
 
   bdata = packet->rtcp->map.data;
   maxsize = packet->rtcp->map.maxsize;
 
-  /* skip header */
-  offset = packet->offset + (2 * sizeof (guint32));
-
-  /* skip sender info */
-  if (packet->type == GST_RTCP_TYPE_SR)
-    offset += (5 * sizeof (guint32));
-
-  /* skip report blocks */
-  offset += (packet->count * 6 * sizeof (guint32));
+  /* skip to the end of the packet */
+  offset = packet->offset + (packet->length << 2) + 4;
 
   /* we need 'len' free bytes now */
   if (G_UNLIKELY (offset + len > maxsize))
     return FALSE;
 
   memcpy (&bdata[offset], data, len);
-  packet->length += (len / sizeof (guint32));
+  packet->length += len >> 2;
   bdata[packet->offset + 2] = (packet->length) >> 8;
   bdata[packet->offset + 3] = (packet->length) & 0xff;
   packet->rtcp->map.size += len;

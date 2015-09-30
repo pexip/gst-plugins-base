@@ -280,7 +280,7 @@ void            gst_rtcp_packet_set_rb                (GstRTCPPacket *packet, gu
                                                        guint32 lsr, guint32 dlsr);
 
 /* profile-specific extensions for SR and RR */
-gboolean        gst_rtcp_packet_set_profile_specific_ext        (GstRTCPPacket * packet,
+gboolean        gst_rtcp_packet_add_profile_specific_ext        (GstRTCPPacket * packet,
                                                                  const guint8 * data, guint len);
 guint16         gst_rtcp_packet_get_profile_specific_ext_length (GstRTCPPacket * packet);
 gboolean        gst_rtcp_packet_get_profile_specific_ext        (GstRTCPPacket * packet,
