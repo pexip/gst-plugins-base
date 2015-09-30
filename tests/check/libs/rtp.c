@@ -1003,7 +1003,7 @@ GST_START_TEST (test_rtcp_buffer_profile_specific_extension)
   gst_rtcp_packet_sr_set_sender_info (&packet, 0x44556677,
       G_GUINT64_CONSTANT (1), 0x11111111, 101, 123456);
   fail_unless_equals_int (0,
-      gst_rtcp_packet_get_profile_specific_ext_len (&packet));
+      gst_rtcp_packet_get_profile_specific_ext_length (&packet));
   fail_unless_equals_int (6, gst_rtcp_packet_get_length (&packet));
 
   /* add profile-specific extension */
@@ -1014,8 +1014,8 @@ GST_START_TEST (test_rtcp_buffer_profile_specific_extension)
     guint len = 0;
 
     fail_unless_equals_int (8, gst_rtcp_packet_get_length (&packet));
-    fail_unless_equals_int (sizeof (pse) / sizeof (guint32),
-        gst_rtcp_packet_get_profile_specific_ext_len (&packet));
+    fail_unless_equals_int (sizeof (pse) / 4,
+        gst_rtcp_packet_get_profile_specific_ext_length (&packet));
 
     /* gst_rtcp_packet_get_profile_specific_ext */
     fail_unless (gst_rtcp_packet_get_profile_specific_ext (&packet, &data, &len));

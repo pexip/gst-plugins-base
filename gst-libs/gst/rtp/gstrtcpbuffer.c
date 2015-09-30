@@ -958,7 +958,7 @@ gst_rtcp_packet_add_rb (GstRTCPPacket * packet, guint32 ssrc,
   g_return_val_if_fail (packet->rtcp->map.flags & GST_MAP_WRITE, FALSE);
   /* if profile-specific extension is added, fail for now!? */
   g_return_val_if_fail (
-      gst_rtcp_packet_get_profile_specific_ext_len (packet) == 0, FALSE);
+      gst_rtcp_packet_get_profile_specific_ext_length (packet) == 0, FALSE);
 
   if (packet->count >= GST_RTCP_MAX_RB_COUNT)
     goto no_space;
@@ -1091,14 +1091,14 @@ gst_rtcp_packet_set_profile_specific_ext (GstRTCPPacket * packet,
 }
 
 /**
- * gst_rtcp_packet_get_profile_specific_ext_len:
+ * gst_rtcp_packet_get_profile_specific_ext_length:
  * @packet: a valid SR or RR #GstRTCPPacket
  *
  * Returns: The number of 32-bit words containing profile-specific extension
  *          data from @packet.
  */
 guint16
-gst_rtcp_packet_get_profile_specific_ext_len (GstRTCPPacket * packet)
+gst_rtcp_packet_get_profile_specific_ext_length (GstRTCPPacket * packet)
 {
   guint pse_offset = 2;
 
@@ -1139,7 +1139,7 @@ gst_rtcp_packet_get_profile_specific_ext (GstRTCPPacket * packet,
   g_return_val_if_fail (packet->rtcp != NULL, FALSE);
   g_return_val_if_fail (packet->rtcp->map.flags & GST_MAP_READ, FALSE);
 
-  pse_len = gst_rtcp_packet_get_profile_specific_ext_len (packet);
+  pse_len = gst_rtcp_packet_get_profile_specific_ext_length (packet);
   if (pse_len > 0) {
     if (len != NULL)
       *len = pse_len * sizeof (guint32);
@@ -1178,7 +1178,7 @@ gst_rtcp_packet_copy_profile_specific_ext (GstRTCPPacket * packet,
   g_return_val_if_fail (packet->rtcp != NULL, FALSE);
   g_return_val_if_fail (packet->rtcp->map.flags & GST_MAP_READ, FALSE);
 
-  pse_len = gst_rtcp_packet_get_profile_specific_ext_len (packet);
+  pse_len = gst_rtcp_packet_get_profile_specific_ext_length (packet);
   if (pse_len > 0) {
     if (len != NULL)
       *len = pse_len * sizeof (guint32);
