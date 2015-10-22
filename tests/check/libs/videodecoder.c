@@ -24,6 +24,7 @@
 #endif
 #include <gst/gst.h>
 #include <gst/check/gstcheck.h>
+#include <gst/check/gstharness.h>
 #include <gst/video/video.h>
 #include <gst/app/app.h>
 
@@ -80,6 +81,7 @@ struct _GstVideoDecoderTester
 
   guint64 last_buf_num;
   guint64 last_kf_num;
+  gboolean reference_output_buffer;
 };
 
 struct _GstVideoDecoderTesterClass
@@ -97,6 +99,7 @@ gst_video_decoder_tester_start (GstVideoDecoder * dec)
 
   dectester->last_buf_num = -1;
   dectester->last_kf_num = -1;
+  dectester->reference_output_buffer = FALSE;
 
   return TRUE;
 }
@@ -165,8 +168,15 @@ gst_video_decoder_tester_handle_frame (GstVideoDecoder * dec,
 
   gst_buffer_unmap (frame->input_buffer, &map);
 
-  if (frame->output_buffer)
-    return gst_video_decoder_finish_frame (dec, frame);
+  if (frame->output_buffer) {
+    GstFlowReturn ret;
+    if (dectester->reference_output_buffer)
+      gst_buffer_ref (frame->output_buffer);
+    ret = gst_video_decoder_finish_frame (dec, frame);
+    if (dectester->reference_output_buffer)
+      gst_buffer_unref (frame->output_buffer);
+    return ret;
+  }
   gst_video_codec_frame_unref (frame);
   return GST_FLOW_OK;
 }
@@ -1073,6 +1083,84 @@ GST_START_TEST (videodecoder_query_caps_with_custom_getcaps)
 
 GST_END_TEST;
 
+typedef struct
+{
+  GstMeta meta;
+} GstMetaTest;
+
+static GType gst_meta_test_api_get_type (void);
+#define GST_META_TEST_API_TYPE (gst_meta_test_api_get_type())
+
+static const GstMetaInfo *gst_meta_test_get_info (void);
+#define GST_META_TEST_INFO (gst_meta_test_get_info())
+
+#define GST_META_TEST_GET(buf) ((GstMetaTest *)gst_buffer_get_meta(buf,GST_META_TEST_API_TYPE))
+#define GST_META_TEST_ADD(buf) ((GstMetaTest *)gst_buffer_add_meta(buf,GST_META_TEST_INFO,NULL))
+
+static gboolean
+test_transform_func (GstBuffer * dst, GstMeta * meta,
+    GstBuffer * src, GQuark type, gpointer data)
+{
+  if (GST_META_TRANSFORM_IS_COPY (type)) {
+    GST_META_TEST_ADD (dst);
+  } else {
+    /* return FALSE, if transform type is not supported */
+    return FALSE;
+  }
+  return TRUE;
+}
+
+static GType
+gst_meta_test_api_get_type (void)
+{
+  static volatile GType type;
+  static const gchar *tags[] = { NULL };
+
+  if (g_once_init_enter (&type)) {
+    GType _type = gst_meta_api_type_register ("GstMetaTestAPI", tags);
+    g_once_init_leave (&type, _type);
+  }
+  return type;
+}
+
+static const GstMetaInfo *
+gst_meta_test_get_info (void)
+{
+  static const GstMetaInfo *meta_test_info = NULL;
+
+  if (g_once_init_enter (&meta_test_info)) {
+    const GstMetaInfo *mi = gst_meta_register (GST_META_TEST_API_TYPE,
+        "GstMetaTest",
+        sizeof (GstMetaTest),
+        NULL, NULL, test_transform_func);
+    g_once_init_leave (&meta_test_info, mi);
+  }
+  return meta_test_info;
+}
+
+GST_START_TEST (videodecoder_ref_on_output_buffer_can_still_forward_meta)
+{
+  GstVideoDecoderTester *dec = g_object_new (GST_VIDEO_DECODER_TESTER_TYPE, NULL);
+  GstHarness *h = gst_harness_new_with_element (GST_ELEMENT (dec), "sink", "src");
+  GstBuffer *buffer;
+
+  dec->reference_output_buffer = TRUE;
+
+  buffer = create_test_buffer (0);
+  fail_unless (GST_META_TEST_ADD (buffer));
+
+  gst_harness_set_src_caps_str (h, "video/x-test-custom");
+  buffer = gst_harness_push_and_pull (h, buffer);
+
+  fail_unless (GST_META_TEST_GET (buffer));
+  gst_buffer_unref (buffer);
+
+  gst_harness_teardown (h);
+  gst_object_unref (dec);
+}
+GST_END_TEST;
+
+
 
 static Suite *
 gst_videodecoder_suite (void)
@@ -1095,6 +1183,8 @@ gst_videodecoder_suite (void)
   tcase_add_test (tc, videodecoder_backwards_playback);
   tcase_add_test (tc, videodecoder_backwards_buffer_after_segment);
   tcase_add_test (tc, videodecoder_flush_events);
+
+  tcase_add_test (tc, videodecoder_ref_on_output_buffer_can_still_forward_meta);
 
   return s;
 }
