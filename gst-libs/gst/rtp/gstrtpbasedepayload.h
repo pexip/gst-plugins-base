@@ -57,6 +57,8 @@ struct _GstRTPBaseDepayload
   GstSegment segment;
   gboolean need_newsegment;
 
+  gboolean source_info;
+
   /*< private >*/
   GstRTPBaseDepayloadPrivate *priv;
 
