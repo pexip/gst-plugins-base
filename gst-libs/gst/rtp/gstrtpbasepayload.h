@@ -98,6 +98,7 @@ struct _GstRTPBasePayload
   guint    ssrc;
   guint    current_ssrc;
   guint    mtu;
+  gboolean source_info;
 
   GstSegment segment;
 
@@ -164,6 +165,10 @@ GstFlowReturn   gst_rtp_base_payload_push               (GstRTPBasePayload *payl
 
 GstFlowReturn   gst_rtp_base_payload_push_list          (GstRTPBasePayload *payload,
                                                          GstBufferList *list);
+
+GstBuffer *     gst_rtp_base_payload_allocate_output_buffer (GstRTPBasePayload * payload,
+                                                             guint payload_len, guint8 pad_len,
+                                                             guint8 csrc_count);
 
 G_END_DECLS
 
