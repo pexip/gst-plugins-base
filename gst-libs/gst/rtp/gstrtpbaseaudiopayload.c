@@ -111,6 +111,7 @@ struct _GstRTPBaseAudioPayloadPrivate
   guint cached_max_length;
   guint cached_ptime_multiple;
   guint cached_align;
+  guint cached_csrc_count;
 
   gboolean buffer_list;
 };
@@ -461,7 +462,8 @@ gst_rtp_base_audio_payload_push (GstRTPBaseAudioPayload * baseaudiopayload,
       payload_len, GST_TIME_ARGS (timestamp));
 
   /* create buffer to hold the payload */
-  outbuf = gst_rtp_buffer_new_allocate (payload_len, 0, 0);
+  outbuf = gst_rtp_base_payload_allocate_output_buffer (basepayload,
+      payload_len, 0, 0);
 
   /* copy payload */
   gst_rtp_buffer_map (outbuf, GST_MAP_WRITE, &rtp);
@@ -527,7 +529,7 @@ gst_rtp_base_audio_payload_push_buffer (GstRTPBaseAudioPayload *
       payload_len, GST_TIME_ARGS (timestamp));
 
   /* create just the RTP header buffer */
-  outbuf = gst_rtp_buffer_new_allocate (0, 0, 0);
+  outbuf = gst_rtp_base_payload_allocate_output_buffer (basepayload, 0, 0, 0);
 
   /* set metadata */
   gst_rtp_base_audio_payload_set_meta (baseaudiopayload, outbuf, payload_len,
@@ -636,7 +638,7 @@ gst_rtp_base_audio_payload_flush (GstRTPBaseAudioPayload * baseaudiopayload,
 
 
     /* create buffer to hold the payload */
-    outbuf = gst_rtp_buffer_new_allocate (0, 0, 0);
+    outbuf = gst_rtp_base_payload_allocate_output_buffer (basepayload, 0, 0, 0);
 
     paybuf = gst_adapter_take_buffer_fast (adapter, payload_len);
 
@@ -661,8 +663,8 @@ gst_rtp_base_audio_payload_flush (GstRTPBaseAudioPayload * baseaudiopayload,
  * mtu and min/max_ptime values. We cache those so that we don't have to redo
  * all the calculations */
 static gboolean
-gst_rtp_base_audio_payload_get_lengths (GstRTPBasePayload *
-    basepayload, guint * min_payload_len, guint * max_payload_len,
+gst_rtp_base_audio_payload_get_lengths (GstRTPBasePayload * basepayload,
+    guint csrc_count, guint * min_payload_len, guint * max_payload_len,
     guint * align)
 {
   GstRTPBaseAudioPayload *payload;
@@ -680,13 +682,16 @@ gst_rtp_base_audio_payload_get_lengths (GstRTPBasePayload *
 
   mtu = GST_RTP_BASE_PAYLOAD_MTU (payload);
 
-  /* check cached values */
+  /* check cached values. Since csrc_count may vary for each packet, we only
+   * check whether the new value exceeds the cached value and thus result in
+   * smaller payload. */
   if (G_LIKELY (priv->cached_mtu == mtu
           && priv->cached_ptime_multiple ==
           basepayload->ptime_multiple
           && priv->cached_ptime == basepayload->ptime
           && priv->cached_max_ptime == basepayload->max_ptime
-          && priv->cached_min_ptime == basepayload->min_ptime)) {
+          && priv->cached_min_ptime == basepayload->min_ptime
+          && priv->cached_csrc_count >= csrc_count)) {
     /* if nothing changed, return cached values */
     *min_payload_len = priv->cached_min_length;
     *max_payload_len = priv->cached_max_length;
@@ -705,7 +710,7 @@ gst_rtp_base_audio_payload_get_lengths (GstRTPBasePayload *
     maxptime_octets = G_MAXUINT;
   }
   /* MTU max */
-  max_mtu = gst_rtp_buffer_calc_payload_len (mtu, 0, 0);
+  max_mtu = gst_rtp_buffer_calc_payload_len (mtu, 0, csrc_count);
   /* round down to alignment */
   max_mtu = ALIGN_DOWN (max_mtu, *align);
 
@@ -741,6 +746,7 @@ gst_rtp_base_audio_payload_get_lengths (GstRTPBasePayload *
   priv->cached_min_length = *min_payload_len;
   priv->cached_max_length = *max_payload_len;
   priv->cached_align = *align;
+  priv->cached_csrc_count = csrc_count;
 
   return TRUE;
 }
@@ -883,8 +889,9 @@ gst_rtp_base_audio_payload_handle_buffer (GstRTPBasePayload *
     }
   }
 
-  if (!gst_rtp_base_audio_payload_get_lengths (basepayload, &min_payload_len,
-          &max_payload_len, &align))
+  if (!gst_rtp_base_audio_payload_get_lengths (basepayload,
+          gst_rtp_base_payload_get_source_count (basepayload, buffer),
+          &min_payload_len, &max_payload_len, &align))
     goto config_error;
 
   GST_DEBUG_OBJECT (payload,
