@@ -165,6 +165,15 @@ GstFlowReturn   gst_rtp_base_payload_push               (GstRTPBasePayload *payl
 GstFlowReturn   gst_rtp_base_payload_push_list          (GstRTPBasePayload *payload,
                                                          GstBufferList *list);
 
+GstBuffer *     gst_rtp_base_payload_allocate_output_buffer (GstRTPBasePayload * payload,
+                                                             guint payload_len, guint8 pad_len,
+                                                             guint8 csrc_count);
+
+void            gst_rtp_base_payload_set_source_info_enabled (GstRTPBasePayload * payload,
+                                                              gboolean enable);
+
+gboolean        gst_rtp_base_payload_is_source_info_enabled (GstRTPBasePayload * payload);
+
 #ifdef G_DEFINE_AUTOPTR_CLEANUP_FUNC
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstRTPBasePayload, gst_object_unref)
 #endif
