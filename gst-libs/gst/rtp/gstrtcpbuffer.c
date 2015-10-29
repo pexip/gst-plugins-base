@@ -2398,10 +2398,10 @@ gst_rtcp_packet_app_get_ssrc (GstRTCPPacket * packet)
 {
   guint8 *data;
 
-  g_return_if_fail (packet != NULL);
-  g_return_if_fail (packet->type == GST_RTCP_TYPE_APP);
-  g_return_if_fail (packet->rtcp != NULL);
-  g_return_if_fail (packet->rtcp->map.flags & GST_MAP_READ);
+  g_return_val_if_fail (packet != NULL, 0);
+  g_return_val_if_fail (packet->type == GST_RTCP_TYPE_APP, 0);
+  g_return_val_if_fail (packet->rtcp != NULL, 0);
+  g_return_val_if_fail (packet->rtcp->map.flags & GST_MAP_READ, 0);
 
   data = packet->rtcp->map.data + packet->offset + 4;
 
@@ -2446,10 +2446,10 @@ gst_rtcp_packet_app_get_name (GstRTCPPacket * packet)
 {
   guint8 *data;
 
-  g_return_if_fail (packet != NULL);
-  g_return_if_fail (packet->type == GST_RTCP_TYPE_APP);
-  g_return_if_fail (packet->rtcp != NULL);
-  g_return_if_fail (packet->rtcp->map.flags & GST_MAP_READ);
+  g_return_val_if_fail (packet != NULL, NULL);
+  g_return_val_if_fail (packet->type == GST_RTCP_TYPE_APP, NULL);
+  g_return_val_if_fail (packet->rtcp != NULL, NULL);
+  g_return_val_if_fail (packet->rtcp->map.flags & GST_MAP_READ, NULL);
 
   return packet->rtcp->map.data + packet->offset + 8;
 }
