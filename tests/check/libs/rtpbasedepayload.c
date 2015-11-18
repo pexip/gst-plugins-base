@@ -1176,6 +1176,7 @@ GST_START_TEST (rtp_base_depayload_source_info_test)
   GstRtpDummyDepay *depay;
   GstBuffer *buffer;
   GstRTPSourceMeta *meta;
+  guint seq = 0;
 
   depay = rtp_dummy_depay_new ();
   h = gst_harness_new_with_element (GST_ELEMENT_CAST (depay), "sink", "src");
@@ -1185,7 +1186,7 @@ GST_START_TEST (rtp_base_depayload_source_info_test)
    * no CSRC. */
   g_object_set (depay, "source-info", TRUE, NULL);
   buffer = gst_rtp_buffer_new_allocate (0, 0, 0);
-  rtp_buffer_set (buffer, "ssrc", 0x11, NULL);
+  rtp_buffer_set (buffer, "seq", seq++, "ssrc", 0x11, NULL);
   buffer = gst_harness_push_and_pull (h, buffer);
   fail_unless ((meta = gst_buffer_get_rtp_source_meta (buffer)));
   fail_unless (meta->ssrc);
@@ -1195,7 +1196,8 @@ GST_START_TEST (rtp_base_depayload_source_info_test)
 
   /* Both SSRC and CSRC should be added to the meta */
   buffer = gst_rtp_buffer_new_allocate (0, 0, 2);
-  rtp_buffer_set (buffer, "ssrc", 0x11, "csrc", 0, 0x22, "csrc", 1, 0x33, NULL);
+  rtp_buffer_set (buffer, "seq", seq++, "ssrc", 0x11, "csrc", 0, 0x22,
+      "csrc", 1, 0x33, NULL);
   buffer = gst_harness_push_and_pull (h, buffer);
   fail_unless ((meta = gst_buffer_get_rtp_source_meta (buffer)));
   fail_unless (meta->ssrc);
@@ -1208,7 +1210,7 @@ GST_START_TEST (rtp_base_depayload_source_info_test)
   /* Property disabled should never add meta */
   g_object_set (depay, "source-info", FALSE, NULL);
   buffer = gst_rtp_buffer_new_allocate (0, 0, 0);
-  rtp_buffer_set (buffer, "ssrc", 0x11, NULL);
+  rtp_buffer_set (buffer, "seq", seq++, "ssrc", 0x11, NULL);
   buffer = gst_harness_push_and_pull (h, buffer);
   fail_if (gst_buffer_get_rtp_source_meta (buffer));
   gst_buffer_unref (buffer);
