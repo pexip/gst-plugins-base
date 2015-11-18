@@ -375,7 +375,7 @@ gst_rtp_base_depayload_handle_buffer (GstRTPBaseDepayload * filter,
   GstBuffer *out_buf;
   guint16 seqnum;
   guint32 rtptime;
-  gboolean discont, buf_discont;
+  gboolean discont, buf_discont, buf_unref = FALSE;
   gint gap;
   GstRTPBuffer rtp = { NULL };
 
@@ -446,7 +446,11 @@ gst_rtp_base_depayload_handle_buffer (GstRTPBaseDepayload * filter,
       /* we detected a seqnum discont but the buffer was not flagged with a discont,
        * set the discont flag so that the subclass can throw away old data. */
       GST_LOG_OBJECT (filter, "mark DISCONT on input buffer");
-      in = gst_buffer_make_writable (in);
+      if (!gst_buffer_is_writable (in)) {
+        /* don't unref 'in' since it will be unreffed by chain func */
+        in = gst_buffer_copy (in);
+        buf_unref = TRUE;
+      }
       GST_BUFFER_FLAG_SET (in, GST_BUFFER_FLAG_DISCONT);
     }
   }
@@ -476,6 +480,8 @@ gst_rtp_base_depayload_handle_buffer (GstRTPBaseDepayload * filter,
   }
 
   priv->input_buffer = NULL;
+  if (G_UNLIKELY (buf_unref))
+    gst_buffer_unref (in);
 
   return ret;
 

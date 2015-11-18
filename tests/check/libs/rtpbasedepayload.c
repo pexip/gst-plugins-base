@@ -868,6 +868,48 @@ GST_START_TEST (rtp_base_depayload_packet_lost_test)
 }
 
 GST_END_TEST
+/* basedepayloader should mark output buffer as discont when there is gap in
+ * seqnum */
+GST_START_TEST (rtp_base_depayload_gap_in_seqnum)
+{
+  GstHarness *h;
+  GstRtpDummyDepay *depay;
+  GstBuffer *buffer;
+
+  depay = rtp_dummy_depay_new ();
+  h = gst_harness_new_with_element (GST_ELEMENT_CAST (depay), "sink", "src");
+  gst_harness_set_src_caps_str (h, "application/x-rtp");
+
+  /* First buffer */
+  buffer = gst_rtp_buffer_new_allocate (0, 0, 0);
+  rtp_buffer_set (buffer, "seq", 0, NULL);
+  buffer = gst_harness_push_and_pull (h, buffer);
+  fail_if (GST_BUFFER_IS_DISCONT (buffer));
+  gst_buffer_unref (buffer);
+
+  /* Second buffer has gap in seqnum, no discont flag */
+  buffer = gst_rtp_buffer_new_allocate (0, 0, 0);
+  rtp_buffer_set (buffer, "seq", 2, NULL);
+  GST_BUFFER_FLAG_UNSET (buffer, GST_BUFFER_FLAG_DISCONT);
+  buffer = gst_harness_push_and_pull (h, buffer);
+  fail_unless (GST_BUFFER_IS_DISCONT (buffer));
+  gst_buffer_unref (buffer);
+
+  /* Third buffer has gap in seqnum, no discont flag, not writable */
+  buffer = gst_rtp_buffer_new_allocate (0, 0, 0);
+  rtp_buffer_set (buffer, "seq", 4, NULL);
+  GST_BUFFER_FLAG_UNSET (buffer, GST_BUFFER_FLAG_DISCONT);
+  gst_harness_push (h, gst_buffer_ref (buffer));
+  gst_buffer_unref (buffer);
+  buffer = gst_harness_pull (h);
+  fail_unless (GST_BUFFER_IS_DISCONT (buffer));
+  gst_buffer_unref (buffer);
+
+  gst_object_unref (depay);
+  gst_harness_teardown (h);
+}
+
+GST_END_TEST
 /* a depayloader that receives identical caps events simply ignores the latter
  * events without propagating them downstream.
  */
@@ -1241,6 +1283,7 @@ rtp_basepayloading_suite (void)
   tcase_add_test (tc_chain, rtp_base_depayload_without_negotiation_test);
 
   tcase_add_test (tc_chain, rtp_base_depayload_packet_lost_test);
+  tcase_add_test (tc_chain, rtp_base_depayload_gap_in_seqnum);
 
   tcase_add_test (tc_chain, rtp_base_depayload_repeated_caps_test);
   tcase_add_test (tc_chain, rtp_base_depayload_npt_test);
