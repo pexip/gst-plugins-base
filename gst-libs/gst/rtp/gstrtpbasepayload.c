@@ -1146,6 +1146,25 @@ map_failed:
   }
 }
 
+static gboolean
+foreach_metadata_drop (GstBuffer * buffer, GstMeta ** meta, gpointer user_data)
+{
+  GType drop_api_type = (GType)user_data;
+  const GstMetaInfo *info = (*meta)->info;
+
+  if (info->api == drop_api_type)
+    *meta = NULL;
+
+  return TRUE;
+}
+
+static gboolean
+filter_meta (GstBuffer ** buffer, guint idx, gpointer user_data)
+{
+  gst_buffer_foreach_meta (*buffer, foreach_metadata_drop,
+      GST_RTP_SOURCE_META_API_TYPE);
+}
+
 /* Updates the SSRC, payload type, seqnum and timestamp of the RTP buffer
  * before the buffer is pushed. */
 static GstFlowReturn
@@ -1242,11 +1261,14 @@ gst_rtp_base_payload_prepare_push (GstRTPBasePayload * payload,
   }
 
   /* set ssrc, payload type, seq number, caps and rtptime */
+  /* remove unwanted meta */
   if (is_list) {
     gst_buffer_list_foreach (GST_BUFFER_LIST_CAST (obj), set_headers, &data);
+    gst_buffer_list_foreach (GST_BUFFER_LIST_CAST (obj), filter_meta, NULL);
   } else {
     GstBuffer *buf = GST_BUFFER_CAST (obj);
     set_headers (&buf, 0, &data);
+    filter_meta (&buf, 0, NULL);
   }
 
   priv->next_seqnum = data.seqnum;

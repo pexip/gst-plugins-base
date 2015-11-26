@@ -142,7 +142,7 @@ GType
 gst_rtp_source_meta_api_get_type (void)
 {
   static volatile GType type = 0;
-  static const gchar *tags[] = { "origin", NULL };
+  static const gchar *tags[] = { NULL };
 
   if (g_once_init_enter (&type)) {
     GType _type = gst_meta_api_type_register ("GstRTPSourceMetaAPI", tags);
