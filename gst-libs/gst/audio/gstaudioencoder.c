@@ -913,7 +913,12 @@ gst_audio_encoder_finish_frame (GstAudioEncoder * enc, GstBuffer * buf,
 
         priv->bytes_out += size;
 
-        gst_pad_push (enc->srcpad, tmpbuf);
+        ret = gst_pad_push (enc->srcpad, tmpbuf);
+        if (ret != GST_FLOW_OK) {
+          GST_WARNING_OBJECT (enc, "pushing header returned %s",
+            gst_flow_get_name (ret));
+          goto exit;
+        }
       }
       priv->ctx.new_headers = FALSE;
     }
