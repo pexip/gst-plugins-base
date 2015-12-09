@@ -1246,6 +1246,9 @@ gst_app_src_set_caps (GstAppSrc * appsrc, const GstCaps * caps)
     gst_caps_replace (&priv->last_caps, new_caps);
   }
 
+  if (priv->current_caps == NULL)
+    priv->current_caps = gst_caps_copy (caps);
+
   GST_OBJECT_UNLOCK (appsrc);
 
   g_mutex_unlock (&priv->mutex);
