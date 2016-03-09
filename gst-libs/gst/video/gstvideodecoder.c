@@ -1205,6 +1205,36 @@ _flush_events (GstPad * pad, GList * events)
   return NULL;
 }
 
+static void
+_gst_structure_fixate_or_set_field_int (GstStructure * s, const gchar * field,
+    gint target)
+{
+  if (gst_structure_has_field (s, field))
+    gst_structure_fixate_field_nearest_int (s, field, target);
+  else
+    gst_structure_set (s, field, G_TYPE_INT, target, NULL);
+}
+
+static void
+_gst_structure_fixate_or_set_field_fraction (GstStructure * s,
+    const gchar * field, gint target_n, gint target_d)
+{
+  if (gst_structure_has_field (s, field))
+    gst_structure_fixate_field_nearest_fraction (s, field, target_n, target_d);
+  else
+    gst_structure_set (s, field, GST_TYPE_FRACTION, target_n, target_d, NULL);
+}
+
+static void
+_gst_structure_fixate_or_set_field_string (GstStructure * s,
+    const gchar * field, const gchar * target)
+{
+  if (gst_structure_has_field (s, field))
+    gst_structure_fixate_field_string (s, field, target);
+  else
+    gst_structure_set (s, field, G_TYPE_STRING, target, NULL);
+}
+
 /* Must be called holding the GST_VIDEO_DECODER_STREAM_LOCK */
 static gboolean
 gst_video_decoder_negotiate_default_caps (GstVideoDecoder * decoder)
@@ -1271,17 +1301,14 @@ gst_video_decoder_negotiate_default_caps (GstVideoDecoder * decoder)
 
   for (i = 0; i < caps_size; i++) {
     structure = gst_caps_get_structure (caps, i);
-    /* Random 1280x720@30 for fixation */
-    gst_structure_fixate_field_nearest_int (structure, "width", 1280);
-    gst_structure_fixate_field_nearest_int (structure, "height", 720);
-    gst_structure_fixate_field_nearest_fraction (structure, "framerate", 30, 1);
-    if (gst_structure_has_field (structure, "pixel-aspect-ratio")) {
-      gst_structure_fixate_field_nearest_fraction (structure,
-          "pixel-aspect-ratio", 1, 1);
-    } else {
-      gst_structure_set (structure, "pixel-aspect-ratio", GST_TYPE_FRACTION,
-          1, 1, NULL);
-    }
+    /* Random I420 1280x720@30 for fixation */
+    _gst_structure_fixate_or_set_field_string (structure, "format", "I420");
+    _gst_structure_fixate_or_set_field_int (structure, "width", 1280);
+    _gst_structure_fixate_or_set_field_int (structure, "height", 720);
+    _gst_structure_fixate_or_set_field_fraction (structure,
+        "framerate", 30, 1);
+    _gst_structure_fixate_or_set_field_fraction (structure,
+        "pixel-aspect-ratio", 1, 1);
   }
   caps = gst_caps_fixate (caps);
   structure = gst_caps_get_structure (caps, 0);
