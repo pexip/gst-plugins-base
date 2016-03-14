@@ -1260,9 +1260,9 @@ gst_audio_decoder_finish_frame (GstAudioDecoder * dec, GstBuffer * buf,
     }
   } else if (G_UNLIKELY (frames > priv->frames.length)) {
     if (G_LIKELY (!priv->force)) {
-      GST_ELEMENT_WARNING (dec, STREAM, DECODE,
-          ("received more decoded frames %d than provided %d", frames,
-              priv->frames.length), (NULL));
+      GST_DEBUG_OBJECT (dec,
+          "received more decoded frames %d than provided %d", frames,
+              priv->frames.length);
     }
     frames = priv->frames.length;
   }
@@ -1363,7 +1363,7 @@ gst_audio_decoder_finish_frame (GstAudioDecoder * dec, GstBuffer * buf,
         gst_buffer_foreach_meta (l->data, foreach_metadata, &data);
       }
     } else {
-      GST_WARNING_OBJECT (dec,
+      GST_DEBUG_OBJECT (dec,
           "Can't copy metadata because input buffers disappeared");
     }
   }
