@@ -1295,7 +1295,7 @@ gst_audio_encoder_chain (GstPad * pad, GstObject * parent, GstBuffer * buffer)
 
   /* check for continuity;
    * checked elsewhere in non-perfect case */
-  if (enc->priv->perfect_ts) {
+  if (enc->priv->perfect_ts || enc->priv->hard_resync) {
     GstClockTimeDiff diff = 0;
     GstClockTime next_ts = 0;
 
