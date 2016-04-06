@@ -241,6 +241,8 @@ struct _GstAudioDecoderPrivate
   gboolean force;
   /* input_segment are output_segment identical */
   gboolean in_out_segment_sync;
+  /* expecting the buffer with DISCONT flag */
+  gboolean expecting_discont_buf;
 
 
   /* input bps estimatation */
@@ -1880,7 +1882,6 @@ gst_audio_decoder_chain (GstPad * pad, GstObject * parent, GstBuffer * buffer)
 {
   GstAudioDecoder *dec;
   GstFlowReturn ret;
-  gboolean act_on_discont = TRUE;
 
   dec = GST_AUDIO_DECODER (parent);
 
@@ -1897,16 +1898,8 @@ gst_audio_decoder_chain (GstPad * pad, GstObject * parent, GstBuffer * buffer)
 
   dec->priv->ctx.had_input_data = TRUE;
 
-  if (dec->priv->plc && dec->priv->ctx.do_plc) {
-    /* Do not act on discont if the last buffer we received was from a gap
-     * event. */
-    GstBuffer * last_buffer = g_queue_peek_tail (&dec->priv->frames);
-    if (last_buffer != NULL)
-      act_on_discont = gst_buffer_get_size (last_buffer) > 0;
-  }
-
-  if (act_on_discont &&
-      GST_BUFFER_FLAG_IS_SET (buffer, GST_BUFFER_FLAG_DISCONT)) {
+  if (!dec->priv->expecting_discont_buf &&
+    GST_BUFFER_FLAG_IS_SET (buffer, GST_BUFFER_FLAG_DISCONT)) {
     gint64 samples, ts;
 
     /* track present position */
@@ -1927,6 +1920,7 @@ gst_audio_decoder_chain (GstPad * pad, GstObject * parent, GstBuffer * buffer)
       dec->priv->samples = samples;
     }
   }
+  dec->priv->expecting_discont_buf = FALSE;
 
   if (dec->input_segment.rate > 0.0)
     ret = gst_audio_decoder_chain_forward (dec, buffer);
@@ -2100,6 +2094,7 @@ gst_audio_decoder_handle_gap (GstAudioDecoder * dec, GstEvent * event)
     /* best effort, not much error handling */
     gst_audio_decoder_handle_frame (dec, klass, buf);
     ret = TRUE;
+    dec->priv->expecting_discont_buf = TRUE;
     gst_event_unref (event);
   } else {
     GstFlowReturn flowret;
