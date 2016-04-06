@@ -1044,6 +1044,10 @@ GST_END_TEST;
 
 GST_START_TEST (audiodecoder_plc_on_gap_event)
 {
+  /* GstAudioDecoder should not mark the stream DISCOUNT flag when
+  concealed audio eliminate discontinuity. More important it should not
+  mess with the timestamps */
+
   GstClockTime pts;
   GstClockTime dur = gst_util_uint64_scale_round (1, GST_SECOND, TEST_MSECS_PER_SAMPLE);
   GstBuffer *buf;
@@ -1074,8 +1078,7 @@ GST_START_TEST (audiodecoder_plc_on_gap_event)
   buf = gst_harness_pull (h);
   fail_unless_equals_int (pts, GST_BUFFER_PTS (buf));
   fail_unless_equals_int (dur, GST_BUFFER_DURATION (buf));
-  // fail_unless (!GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_DISCONT));
-  // TODO: make the behaviour more consistent
+  fail_unless (!GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_DISCONT));
   gst_buffer_unref (buf);
   gst_harness_teardown (h);
 }
@@ -1083,6 +1086,9 @@ GST_END_TEST;
 
 GST_START_TEST (audiodecoder_plc_on_gap_event_with_delay)
 {
+  /* The same thing as in audiodecoder_plc_on_gap_event, but GstAudioDecoder
+  subclass delays the decoding
+  */
   GstClockTime pts0, pts1;
   GstClockTime dur = gst_util_uint64_scale_round (1, GST_SECOND, TEST_MSECS_PER_SAMPLE);
   GstBuffer *buf;
