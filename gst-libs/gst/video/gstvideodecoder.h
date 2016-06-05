@@ -367,6 +367,9 @@ void     gst_video_decoder_set_max_errors (GstVideoDecoder * dec,
 
 gint     gst_video_decoder_get_max_errors (GstVideoDecoder * dec);
 
+void     gst_video_decoder_set_drop_error_frames_early (GstVideoDecoder * dec,
+             gboolean early);
+
 void     gst_video_decoder_set_needs_format (GstVideoDecoder * dec,
                                              gboolean enabled);
 
