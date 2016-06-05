@@ -378,6 +378,10 @@ GST_EXPORT
 gint     gst_video_decoder_get_max_errors (GstVideoDecoder * dec);
 
 GST_EXPORT
+void     gst_video_decoder_set_drop_error_frames_early (GstVideoDecoder * dec,
+             gboolean early);
+
+GST_EXPORT
 void     gst_video_decoder_set_needs_format (GstVideoDecoder * dec,
                                              gboolean enabled);
 
