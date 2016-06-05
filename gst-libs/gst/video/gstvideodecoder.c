@@ -352,6 +352,7 @@ struct _GstVideoDecoderPrivate
   /* input_segment are output_segment identical */
   gboolean in_out_segment_sync;
 
+  gboolean drop_error_frames_early;
   gboolean error_drop_frame;
   gint req_keyunit_interval;
   GstClockTime wait_for_sync;
@@ -639,6 +640,7 @@ gst_video_decoder_init (GstVideoDecoder * decoder, GstVideoDecoderClass * klass)
   decoder->priv->needs_format = FALSE;
   decoder->priv->error_drop_frame = DEFAULT_ERROR_DROP_FRAME;
   decoder->priv->req_keyunit_interval = DEFAULT_REQUEST_KEY_UNIT_INTERVAL;
+  decoder->priv->drop_error_frames_early = FALSE;
 
   decoder->priv->min_latency = 0;
   decoder->priv->max_latency = 0;
@@ -3514,6 +3516,17 @@ gst_video_decoder_decode_frame (GstVideoDecoder * decoder,
       ", dist %d", GST_TIME_ARGS (frame->pts), GST_TIME_ARGS (frame->dts),
       frame->distance_from_sync);
 
+  if (priv->error_drop_frame && priv->drop_error_frames_early &&
+      GST_CLOCK_TIME_IS_VALID (priv->wait_for_sync) &&
+      !GST_VIDEO_CODEC_FRAME_IS_SYNC_POINT (frame)) {
+    GST_DEBUG_OBJECT (decoder, "Drop error frame early");
+    if (GST_CLOCK_TIME_IS_VALID (frame->pts))
+      gst_video_decoder_report_decode_error (decoder, frame->pts,
+          decoder->priv->decode_error);
+    gst_video_decoder_release_frame (decoder, frame);
+    return GST_FLOW_OK;
+  }
+
   gst_video_codec_frame_ref (frame);
   priv->frames = g_list_append (priv->frames, frame);
 
@@ -4252,6 +4265,23 @@ gst_video_decoder_get_max_errors (GstVideoDecoder * dec)
   g_return_val_if_fail (GST_IS_VIDEO_DECODER (dec), 0);
 
   return dec->priv->max_errors;
+}
+
+/**
+ * gst_video_decoder_set_drop_error_frames_early:
+ * @dec: a #GstVideoDecoder
+ * @early: new state
+ *
+ * If #GstVideoDecoder:error-drop-frame is %TRUE, @early will decide wether
+ * frame is dropped before or after @handle_frame. If @early is %TRUE all input
+ * data will be dropped before @handle_frame until a frame marked as sync
+ * point is received.
+ */
+void
+gst_video_decoder_set_drop_error_frames_early (GstVideoDecoder * dec,
+    gboolean early)
+{
+  dec->priv->drop_error_frames_early = early;
 }
 
 /**
