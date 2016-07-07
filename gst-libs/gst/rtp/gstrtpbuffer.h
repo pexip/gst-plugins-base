@@ -151,6 +151,22 @@ gboolean       gst_rtp_buffer_add_extension_twobytes_header (GstRTPBuffer *rtp,
                                                              guint size);
 
 /**
+ * GstRTPBufferFlags:
+ * @GST_RTP_BUFFER_FLAG_RETRANSMISSION: The #GstBuffer is a retranmission
+ *                                      packet.
+ * @GST_VIDEO_BUFFER_FLAG_LAST:         Offset to define more flags.
+ *
+ * Additional RTP buffer flags. These flags can potentially be used on any
+ * buffers carrying RTP packets.
+ *
+ * Since: 1.10
+ */
+typedef enum {
+  GST_RTP_BUFFER_FLAG_RETRANSMISSION = (GST_BUFFER_FLAG_LAST << 0),
+  GST_RTP_BUFFER_FLAG_LAST           = (GST_BUFFER_FLAG_LAST << 8)
+} GstRTPBufferFlags;
+
+/**
  * GstRTPBufferMapFlags:
  * @GST_RTP_BUFFER_MAP_FLAG_SKIP_PADDING: Skip mapping and validation of RTP
  *           padding and RTP pad count when present. Useful for buffers where
