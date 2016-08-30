@@ -925,6 +925,14 @@ gst_rtp_base_depayload_packet_lost (GstRTPBaseDepayload * filter,
     return FALSE;
   }
 
+  sevent = gst_pad_get_sticky_event (filter->srcpad, GST_EVENT_SEGMENT, 0);
+  if (G_UNLIKELY (!sevent)) {
+    /* Typically happens if lost event arrives before first buffer */
+    GST_DEBUG_OBJECT (filter, "Ignore packet loss because segment event missing");
+    return FALSE;
+  }
+  gst_event_unref (sevent);
+
   /* send GAP event */
   sevent = gst_event_new_gap (timestamp, duration);
 
