@@ -933,6 +933,14 @@ gst_rtp_base_depayload_packet_lost (GstRTPBaseDepayload * filter,
     return FALSE;
   }
 
+  if (filter->need_newsegment) {
+    /* Push segment before gap since packet loss concealment may take place
+     * downstream. But don't reset need_newsegment since we may be able to
+     * send a more accurate segment event when we receive the first buffer. */
+    sevent = create_segment_event (filter, 0, -1);
+    gst_pad_push_event (filter->srcpad, sevent);
+  }
+
   /* send GAP event */
   sevent = gst_event_new_gap (timestamp, duration);
 
