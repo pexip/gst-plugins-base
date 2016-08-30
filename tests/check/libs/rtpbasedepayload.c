@@ -925,6 +925,59 @@ GST_START_TEST (rtp_base_depayload_packet_lost_test)
 }
 
 GST_END_TEST
+/* If a lost event is received before the first buffer, the rtp base
+ * depayloader should make sure that stream-start, caps and segment events are
+ * sent before the gap event so that packet loss concealment can take place
+ * downstream. */
+GST_START_TEST (rtp_base_depayload_packet_lost_before_first_buffer_test)
+{
+  GstHarness *h;
+  GstEvent *event;
+  GstRtpDummyDepay *depay;
+  const GstEventType etype[] = {
+    GST_EVENT_STREAM_START, GST_EVENT_CAPS, GST_EVENT_SEGMENT, GST_EVENT_GAP
+  };
+
+  depay = rtp_dummy_depay_new ();
+  h = gst_harness_new_with_element (GST_ELEMENT_CAST (depay), "sink", "src");
+  gst_harness_set_src_caps_str (h, "application/x-rtp");
+
+  /* Verify that depayloader has received setup events */
+  for (gint i = 0; i < 3; i++) {
+    event = gst_pad_get_sticky_event (h->srcpad, etype[i], 0);
+    fail_unless (event != NULL);
+    gst_event_unref (event);
+  }
+
+  /* Send loss event to depayloader */
+  gst_harness_push_event (h, gst_event_new_custom (GST_EVENT_CUSTOM_DOWNSTREAM,
+          gst_structure_new ("GstRTPPacketLost",
+              "seqnum", G_TYPE_UINT, (guint) 0,
+              "timestamp", G_TYPE_UINT64, (guint64) 0,
+              "duration", G_TYPE_UINT64, (guint64) 10 * GST_MSECOND, NULL)));
+
+  /* Verify that setup events are sent before gap event */
+  for (gint i = 0; i < 4; i++) {
+    fail_unless (event = gst_harness_pull_event (h));
+    fail_unless_equals_int (GST_EVENT_TYPE (event), etype[i]);
+    gst_event_unref (event);
+  }
+
+  /* When a buffer is pushed, an updated (and more accurate) segment event
+   * should aslo be sent. */
+  gst_harness_push (h, gst_rtp_buffer_new_allocate (0, 0, 0));
+
+  event = gst_harness_pull_event (h);
+  fail_unless_equals_int (GST_EVENT_TYPE (event), GST_EVENT_SEGMENT);
+  gst_event_unref (event);
+
+  fail_unless_equals_int (gst_harness_buffers_received (h), 1);
+
+  g_object_unref (depay);
+  gst_harness_teardown (h);
+}
+
+GST_END_TEST;
 /* rtp base depayloader should set DISCONT flag on buffer in case of a large
  * sequence number gap, and it's not set already by upstream. This tests a
  * certain code path where the buffer needs to be made writable to set the
@@ -1333,6 +1386,8 @@ rtp_basepayloading_suite (void)
   tcase_add_test (tc_chain, rtp_base_depayload_without_negotiation_test);
 
   tcase_add_test (tc_chain, rtp_base_depayload_packet_lost_test);
+  tcase_add_test (tc_chain,
+      rtp_base_depayload_packet_lost_before_first_buffer_test);
   tcase_add_test (tc_chain, rtp_base_depayload_seq_discont_test);
 
   tcase_add_test (tc_chain, rtp_base_depayload_repeated_caps_test);
