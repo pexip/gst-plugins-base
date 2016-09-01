@@ -155,6 +155,7 @@ gboolean    gst_video_frame_copy_plane    (GstVideoFrame *dest, const GstVideoFr
  *
  * Additional video buffer flags. These flags can potentially be used on any
  * buffers carrying video data - even encoded data.
+ * Note that these are only valid for #GstCaps of type: video/x-raw.
  */
 typedef enum {
   GST_VIDEO_BUFFER_FLAG_INTERLACED  = (GST_BUFFER_FLAG_LAST << 0),
