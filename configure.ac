@@ -723,8 +723,8 @@ AG_GST_CHECK_FEATURE(OGG, [Xiph Ogg library], ogg, [
 
 dnl *** Opus ***
 translit(dnm, m, l) AM_CONDITIONAL(USE_OPUS, true)
-AG_GST_CHECK_FEATURE(OPUS, [opus], opus, [
-  PKG_CHECK_MODULES(OPUS, opus >= 0.9.4, [
+AG_GST_CHECK_FEATURE(OPUS, [opus], opus-sse, [
+  PKG_CHECK_MODULES(OPUS, opus-sse >= 0.9.4, [
           AC_DEFINE([HAVE_OPUS], 1, [Define if Opus >= 0.9.4 is installed])
           HAVE_OPUS="yes"
   ], [
