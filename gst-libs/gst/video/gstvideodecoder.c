@@ -441,6 +441,7 @@ struct _GstVideoDecoderPrivate
 #define DEFAULT_REQUEST_KEY_UNIT_INTERVAL (-1)
 #define DEFAULT_ERROR_DROP_FRAME          FALSE
 #define DEFAULT_ERROR_STATE               GST_VIDEO_DECODER_OK
+#define DEFAULT_MAX_ERRORS                GST_VIDEO_DECODER_MAX_ERRORS
 
 enum
 {
@@ -448,6 +449,7 @@ enum
   PROP_REQUEST_KEY_UNIT_INTERVAL,
   PROP_ERROR_DROP_FRAME,
   PROP_ERROR_STATE,
+  PROP_MAX_ERRORS,
   PROP_LAST
 };
 
@@ -581,6 +583,12 @@ gst_video_decoder_class_init (GstVideoDecoderClass * klass)
           GST_VIDEO_DECODER_LAST_ERROR_STATE-1, DEFAULT_ERROR_STATE,
           G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class, PROP_MAX_ERRORS,
+      g_param_spec_int ("max-errors", "Max errors",
+          "Max consecutive decoder errors before returning flow error",
+          -1, G_MAXINT, DEFAULT_MAX_ERRORS,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   gstelement_class->change_state =
       GST_DEBUG_FUNCPTR (gst_video_decoder_change_state);
 
@@ -641,6 +649,7 @@ gst_video_decoder_init (GstVideoDecoder * decoder, GstVideoDecoderClass * klass)
   decoder->priv->error_drop_frame = DEFAULT_ERROR_DROP_FRAME;
   decoder->priv->req_keyunit_interval = DEFAULT_REQUEST_KEY_UNIT_INTERVAL;
   decoder->priv->drop_error_frames_early = FALSE;
+  decoder->priv->max_errors = DEFAULT_MAX_ERRORS;
 
   decoder->priv->min_latency = 0;
   decoder->priv->max_latency = 0;
@@ -660,6 +669,9 @@ gst_video_decoder_set_property (GObject * object, guint prop_id,
       break;
     case PROP_ERROR_DROP_FRAME:
       dec->priv->error_drop_frame = g_value_get_boolean (value);
+      break;
+    case PROP_MAX_ERRORS:
+      gst_video_decoder_set_max_errors (dec, g_value_get_int (value));
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -682,6 +694,9 @@ gst_video_decoder_get_property (GObject * object, guint prop_id, GValue * value,
       break;
     case PROP_ERROR_STATE:
       g_value_set_int (value, dec->priv->decode_error);
+      break;
+    case PROP_MAX_ERRORS:
+      g_value_set_int (value, gst_video_decoder_get_max_errors (dec));
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -2156,7 +2171,6 @@ gst_video_decoder_reset (GstVideoDecoder * decoder, gboolean full,
     priv->pending_events = NULL;
 
     priv->error_count = 0;
-    priv->max_errors = GST_VIDEO_DECODER_MAX_ERRORS;
     priv->had_output_data = FALSE;
     priv->had_input_data = FALSE;
 
