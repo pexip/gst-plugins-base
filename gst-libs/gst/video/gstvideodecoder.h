@@ -167,6 +167,7 @@ G_STMT_START {                                                              \
 typedef enum _GstVideoDecoderErrorState {
   GST_VIDEO_DECODER_OK = 0,
   GST_VIDEO_DECODER_GAP,
+  GST_VIDEO_DECODER_GAP_NO_PACKET_LOSS,
   GST_VIDEO_DECODER_DISCONT,
   GST_VIDEO_DECODER_CORRUPTION,
   GST_VIDEO_DECODER_BITSTREAM_FAULT,
