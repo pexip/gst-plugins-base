@@ -1060,7 +1060,8 @@ gst_video_decoder_report_decode_error (GstVideoDecoder * decoder,
 
   GST_DEBUG_OBJECT (decoder, "set decode error, %u, %"GST_TIME_FORMAT,
       state, GST_TIME_ARGS (ts));
-  if (state != GST_VIDEO_DECODER_FORCE_KEY_UNIT) {
+  if (state != GST_VIDEO_DECODER_FORCE_KEY_UNIT &&
+      state != GST_VIDEO_DECODER_GAP_NO_PACKET_LOSS) {
     if (decoder->priv->req_keyunit_interval == -1)
       return;
     if (decoder->priv->req_keyunit_interval != 0 &&
@@ -1071,11 +1072,13 @@ gst_video_decoder_report_decode_error (GstVideoDecoder * decoder,
   }
 
   decoder->priv->wait_for_sync = ts;
-  GST_INFO_OBJECT (decoder, "upstream force key unit, %"GST_TIME_FORMAT,
-      GST_TIME_ARGS (ts));
-  gst_pad_push_event (decoder->sinkpad,
-      gst_video_event_new_upstream_force_key_unit (GST_CLOCK_TIME_NONE,
-          TRUE, 1));
+  if (state != GST_VIDEO_DECODER_GAP_NO_PACKET_LOSS) {
+    GST_INFO_OBJECT (decoder, "upstream force key unit, %"GST_TIME_FORMAT,
+        GST_TIME_ARGS (ts));
+    gst_pad_push_event (decoder->sinkpad,
+        gst_video_event_new_upstream_force_key_unit (GST_CLOCK_TIME_NONE,
+            TRUE, 1));
+  }
 }
 
 static GList *
@@ -1322,8 +1325,14 @@ gst_video_decoder_sink_event_default (GstVideoDecoder * decoder,
 
       if (decoder->priv->req_keyunit_interval > -1) {
         GstClockTime ts;
+        gboolean noloss;
         gst_event_parse_gap (event, &ts, NULL);
-        gst_video_decoder_report_decode_error (decoder, ts, GST_VIDEO_DECODER_GAP);
+        if (!gst_structure_get_boolean (gst_event_get_structure (event),
+            "no-packet-loss", &noloss))
+          noloss = FALSE;
+
+        gst_video_decoder_report_decode_error (decoder, ts, noloss ?
+            GST_VIDEO_DECODER_GAP_NO_PACKET_LOSS : GST_VIDEO_DECODER_GAP);
       }
 
       /* Ensure we have caps before forwarding the event */
