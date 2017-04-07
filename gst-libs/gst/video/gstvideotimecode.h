@@ -26,7 +26,6 @@ G_BEGIN_DECLS
 
 typedef struct _GstVideoTimeCodeConfig GstVideoTimeCodeConfig;
 typedef struct _GstVideoTimeCode GstVideoTimeCode;
-typedef struct _GstVideoTimeCodeInterval GstVideoTimeCodeInterval;
 
 /**
  * GstVideoTimeCodeFlags:
@@ -101,26 +100,6 @@ struct _GstVideoTimeCode {
   guint field_count;
 };
 
-/**
- * GstVideoTimeCodeInterval:
- * @hours: the hours field of #GstVideoTimeCodeInterval
- * @minutes: the minutes field of #GstVideoTimeCodeInterval
- * @seconds: the seconds field of #GstVideoTimeCodeInterval
- * @frames: the frames field of #GstVideoTimeCodeInterval
- *
- * A representation of a difference between two #GstVideoTimeCode instances.
- * Will not necessarily correspond to a real timecode (e.g. 00:00:10;00)
- *
- * Since: 1.12
- */
-struct _GstVideoTimeCodeInterval {
-  guint hours;
-  guint minutes;
-  guint seconds;
-  guint frames;
-};
-
-
 #define GST_TYPE_VIDEO_TIME_CODE (gst_video_time_code_get_type())
 GType gst_video_time_code_get_type (void);
 
@@ -134,12 +113,6 @@ GstVideoTimeCode * gst_video_time_code_new          (guint                    fp
                                                      guint                    frames,
                                                      guint                    field_count);
 GstVideoTimeCode * gst_video_time_code_new_empty    (void);
-GstVideoTimeCode * gst_video_time_code_new_from_string    (const gchar * tc_str);
-GstVideoTimeCode * gst_video_time_code_new_from_date_time (guint              fps_n,
-                                                     guint                    fps_d,
-                                                     GDateTime              * dt,
-                                                     GstVideoTimeCodeFlags    flags,
-                                                     guint                    field_count);
 void gst_video_time_code_free                       (GstVideoTimeCode       * tc);
 
 GstVideoTimeCode * gst_video_time_code_copy         (const GstVideoTimeCode * tc);
@@ -153,12 +126,6 @@ void gst_video_time_code_init                       (GstVideoTimeCode       * tc
                                                      guint                    minutes,
                                                      guint                    seconds,
                                                      guint                    frames,
-                                                     guint                    field_count);
-void gst_video_time_code_init_from_date_time        (GstVideoTimeCode       * tc,
-                                                     guint                    fps_n,
-                                                     guint                    fps_d,
-                                                     GDateTime              * dt,
-                                                     GstVideoTimeCodeFlags    flags,
                                                      guint                    field_count);
 void gst_video_time_code_clear                      (GstVideoTimeCode       * tc);
 
@@ -178,27 +145,6 @@ GDateTime *gst_video_time_code_to_date_time         (const GstVideoTimeCode * tc
 guint64 gst_video_time_code_nsec_since_daily_jam    (const GstVideoTimeCode * tc);
 
 guint64 gst_video_time_code_frames_since_daily_jam  (const GstVideoTimeCode * tc);
-
-GstVideoTimeCode * gst_video_time_code_add_interval (const GstVideoTimeCode * tc, const GstVideoTimeCodeInterval * tc_inter);
-
-#define GST_TYPE_VIDEO_TIME_CODE_INTERVAL (gst_video_time_code_interval_get_type())
-GType gst_video_time_code_interval_get_type (void);
-
-GstVideoTimeCodeInterval * gst_video_time_code_interval_new  (guint                    hours,
-                                                     guint                    minutes,
-                                                     guint                    seconds,
-                                                     guint                    frames);
-GstVideoTimeCodeInterval * gst_video_time_code_interval_new_from_string    (const gchar * tc_inter_str);
-void gst_video_time_code_interval_free                   (GstVideoTimeCodeInterval       * tc);
-
-GstVideoTimeCodeInterval * gst_video_time_code_interval_copy (const GstVideoTimeCodeInterval * tc);
-
-void gst_video_time_code_interval_init                   (GstVideoTimeCodeInterval       * tc,
-                                                     guint                    hours,
-                                                     guint                    minutes,
-                                                     guint                    seconds,
-                                                     guint                    frames);
-void gst_video_time_code_interval_clear                  (GstVideoTimeCodeInterval       * tc);
 
 G_END_DECLS
 
