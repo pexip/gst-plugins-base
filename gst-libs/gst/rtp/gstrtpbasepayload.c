@@ -30,6 +30,7 @@
 
 #include "gstrtpbasepayload.h"
 #include "gstrtpmeta.h"
+#include "gstrtpaudiolevelmeta.h"
 
 GST_DEBUG_CATEGORY_STATIC (rtpbasepayload_debug);
 #define GST_CAT_DEFAULT (rtpbasepayload_debug)
@@ -49,6 +50,7 @@ struct _GstRTPBasePayloadPrivate
   gboolean pt_set;
 
   gboolean source_info;
+  guint8 audio_level_id;
   GstBuffer *input_meta_buffer;
 
   guint64 base_offset;
@@ -92,6 +94,7 @@ enum
 #define DEFAULT_PTIME_MULTIPLE          0
 #define DEFAULT_RUNNING_TIME            GST_CLOCK_TIME_NONE
 #define DEFAULT_SOURCE_INFO             FALSE
+#define DEFAULT_AUDIO_LEVEL_ID          0
 
 enum
 {
@@ -109,6 +112,7 @@ enum
   PROP_PTIME_MULTIPLE,
   PROP_STATS,
   PROP_SOURCE_INFO,
+  PROP_AUDIO_LEVEL_ID,
   PROP_LAST
 };
 
@@ -307,6 +311,24 @@ gst_rtp_base_payload_class_init (GstRTPBasePayloadClass * klass)
       g_param_spec_boolean("source-info", "RTP source information",
           "Write CSRC based on buffer meta RTP source information",
           DEFAULT_SOURCE_INFO, G_PARAM_READWRITE));
+
+
+  /**
+   * GstRTPBasePayload:audio-level-id:
+   *
+   * Specify the ID to use, writing Audio Level Indication using
+   * extensionheaders as specified by RFC 6464, based on information found in
+   * the input buffer's #GstRTPAudioLevelMeta. The ID has to be a number
+   * between 1 and 14 (inclusive), see RFC 5285 for more information.
+   *
+   * Since: 1.12
+   **/
+  g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_AUDIO_LEVEL_ID,
+      g_param_spec_uint ("audio-level-id", "Audio Level ID",
+          "The ID to use for writing Audio Level Indications using "
+          "extensionheaders (RFC 6464). (0 = Disable)",
+          0, 14, DEFAULT_AUDIO_LEVEL_ID,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   gstelement_class->change_state = gst_rtp_base_payload_change_state;
 
@@ -632,23 +654,25 @@ gst_rtp_base_payload_chain (GstPad * pad, GstObject * parent,
 {
   GstRTPBasePayload *rtpbasepayload;
   GstRTPBasePayloadClass *rtpbasepayload_class;
+  GstRTPBasePayloadPrivate *priv;
   GstFlowReturn ret;
 
   rtpbasepayload = GST_RTP_BASE_PAYLOAD (parent);
   rtpbasepayload_class = GST_RTP_BASE_PAYLOAD_GET_CLASS (rtpbasepayload);
+  priv = rtpbasepayload->priv;
 
   if (!rtpbasepayload_class->handle_buffer)
     goto no_function;
 
-  if (!rtpbasepayload->priv->negotiated)
+  if (!priv->negotiated)
     goto not_negotiated;
 
-  if (rtpbasepayload->priv->source_info) {
+  if (priv->source_info || priv->audio_level_id > 0) {
     /* Save a copy of meta (instead of taking an extra reference before
      * handle_buffer) to make the meta available when allocating a output
      * buffer. */
-    rtpbasepayload->priv->input_meta_buffer = gst_buffer_new ();
-    gst_buffer_copy_into (rtpbasepayload->priv->input_meta_buffer, buffer,
+    priv->input_meta_buffer = gst_buffer_new ();
+    gst_buffer_copy_into (priv->input_meta_buffer, buffer,
         GST_BUFFER_COPY_META, 0, -1);
   }
 
@@ -665,7 +689,7 @@ gst_rtp_base_payload_chain (GstPad * pad, GstObject * parent,
 
   ret = rtpbasepayload_class->handle_buffer (rtpbasepayload, buffer);
 
-  gst_buffer_replace (&rtpbasepayload->priv->input_meta_buffer, NULL);
+  gst_buffer_replace (&priv->input_meta_buffer, NULL);
 
   return ret;
 
@@ -1415,17 +1439,21 @@ GstBuffer *
 gst_rtp_base_payload_allocate_output_buffer (GstRTPBasePayload * payload,
     guint payload_len, guint8 pad_len, guint8 csrc_count)
 {
+  GstRTPBasePayloadPrivate *priv;
   GstBuffer *buffer = NULL;
 
-  if (payload->priv->input_meta_buffer != NULL) {
-    GstRTPSourceMeta *meta =
-      gst_buffer_get_rtp_source_meta (payload->priv->input_meta_buffer);
-    if (meta != NULL) {
+  priv = payload->priv;
+
+  if (priv->source_info && priv->input_meta_buffer != NULL) {
+    GstRTPSourceMeta *source_meta =
+        gst_buffer_get_rtp_source_meta (payload->priv->input_meta_buffer);
+
+    if (source_meta != NULL) {
       guint total_csrc_count, idx, i;
       GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
 
-      total_csrc_count = csrc_count + meta->csrc_count +
-        (meta->ssrc_valid ? 1 : 0);
+      total_csrc_count = csrc_count + source_meta->csrc_count +
+          (source_meta->ssrc_valid ? 1 : 0);
       total_csrc_count = MIN (total_csrc_count, 15);
       buffer = gst_rtp_buffer_new_allocate (payload_len, pad_len,
           total_csrc_count);
@@ -1435,10 +1463,10 @@ gst_rtp_base_payload_allocate_output_buffer (GstRTPBasePayload * payload,
       /* Skip CSRC fields requested by derived class and fill CSRCs from meta.
        * Finally append the SSRC as a new CSRC. */
       idx = csrc_count;
-      for (i = 0; i < meta->csrc_count && idx < 15; i++, idx++)
-        gst_rtp_buffer_set_csrc (&rtp, idx, meta->csrc[i]);
-      if (meta->ssrc_valid && idx < 15)
-        gst_rtp_buffer_set_csrc (&rtp, idx, meta->ssrc);
+      for (i = 0; i < source_meta->csrc_count && idx < 15; i++, idx++)
+        gst_rtp_buffer_set_csrc (&rtp, idx, source_meta->csrc[i]);
+      if (source_meta->ssrc_valid && idx < 15)
+        gst_rtp_buffer_set_csrc (&rtp, idx, source_meta->ssrc);
 
       gst_rtp_buffer_unmap (&rtp);
     }
@@ -1446,6 +1474,18 @@ gst_rtp_base_payload_allocate_output_buffer (GstRTPBasePayload * payload,
 
   if (buffer == NULL)
     buffer = gst_rtp_buffer_new_allocate (payload_len, pad_len, csrc_count);
+
+  if (priv->audio_level_id > 0 && priv->input_meta_buffer != NULL) {
+    GstRTPAudioLevelMeta *audio_meta =
+        gst_buffer_get_rtp_audio_level_meta (priv->input_meta_buffer);
+    if (audio_meta != NULL) {
+      GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
+      gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
+      gst_rtp_audio_level_meta_add_one_byte_ext (audio_meta, &rtp,
+          priv->audio_level_id);
+      gst_rtp_buffer_unmap (&rtp);
+    }
+  }
 
   return buffer;
 }
@@ -1524,6 +1564,9 @@ gst_rtp_base_payload_set_property (GObject * object, guint prop_id,
       gst_rtp_base_payload_set_source_info_enabled (rtpbasepayload,
           g_value_get_boolean (value));
       break;
+    case PROP_AUDIO_LEVEL_ID:
+      priv->audio_level_id = g_value_get_uint (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -1590,6 +1633,9 @@ gst_rtp_base_payload_get_property (GObject * object, guint prop_id,
     case PROP_SOURCE_INFO:
       g_value_set_boolean (value,
           gst_rtp_base_payload_is_source_info_enabled (rtpbasepayload));
+      break;
+    case PROP_AUDIO_LEVEL_ID:
+      g_value_set_uint (value, priv->audio_level_id);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
