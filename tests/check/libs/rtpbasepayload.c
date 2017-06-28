@@ -24,6 +24,7 @@
 #include <gst/rtp/gstrtpbuffer.h>
 #include <gst/rtp/gstrtpbasepayload.h>
 #include <gst/rtp/gstrtpmeta.h>
+#include <gst/rtp/gstrtpaudiolevelmeta.h>
 
 #define DEFAULT_CLOCK_RATE (42)
 #define BUFFER_BEFORE_LIST (10)
@@ -1851,6 +1852,75 @@ GST_START_TEST (rtp_base_payload_property_source_info_test)
 
 GST_END_TEST;
 
+/* basepayloader has a property audio-level-id that makes it aware of
+ * audio level indications passed as GstRTPAudioLevelMeta on the input buffers.
+ */
+GST_START_TEST (rtp_base_payload_property_audio_level_id_test)
+{
+  GstHarness *h;
+  GstRtpDummyPay *pay;
+  GstRTPAudioLevelMeta *meta;
+  GstBuffer *buffer;
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
+  guint8 id = 10;
+
+  pay = rtp_dummy_pay_new ();
+  h = gst_harness_new_with_element (GST_ELEMENT_CAST (pay), "sink", "src");
+  gst_harness_set_src_caps_str (h, "application/x-rtp");
+
+  /* Input buffer has no meta, payloader should not add extensionheader */
+  g_object_set (pay, "audio-level-id", id, NULL);
+  buffer = gst_buffer_new ();
+  buffer = gst_harness_push_and_pull (h, buffer);
+  gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
+  meta =
+      gst_buffer_extract_rtp_audio_level_meta_one_byte_ext (buffer, &rtp, id);
+  fail_unless (meta == NULL);
+  gst_rtp_buffer_unmap (&rtp);
+  gst_buffer_unref (buffer);
+
+  /* Input buffer has meta, payloader should add extensionheader for the
+     right ID */
+  buffer = gst_buffer_new ();
+  fail_unless (gst_buffer_add_rtp_audio_level_meta (buffer, 100, TRUE));
+  buffer = gst_harness_push_and_pull (h, buffer);
+  gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
+  for (gint i = 1; i <= 14; i++) {
+    meta = gst_buffer_extract_rtp_audio_level_meta_one_byte_ext (buffer,
+        &rtp, i);
+    if (i == id) {
+      fail_unless (meta);
+      fail_unless_equals_int (meta->level, 100);
+      fail_unless (meta->voice_activity == TRUE);
+    } else {
+      fail_unless (meta == NULL);
+    }
+  }
+  gst_rtp_buffer_unmap (&rtp);
+  gst_buffer_unref (buffer);
+
+  /* When property is disabled, the meta should be ignored and no
+     extensionheader added. */
+  g_object_set (pay, "audio-level-id", 0, NULL);
+  buffer = gst_buffer_new ();
+  fail_unless (gst_buffer_add_rtp_audio_level_meta (buffer, 100, TRUE));
+  buffer = gst_harness_push_and_pull (h, buffer);
+  gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
+  for (gint i = 1; i <= 14; i++) {
+    meta = gst_buffer_extract_rtp_audio_level_meta_one_byte_ext (buffer,
+        &rtp, i);
+    fail_unless (meta == NULL);
+  }
+  gst_rtp_buffer_unmap (&rtp);
+  gst_buffer_unref (buffer);
+
+  g_object_unref (pay);
+  gst_harness_teardown (h);
+}
+
+GST_END_TEST;
+
+
 /* push a single buffer to the payloader which should successfully payload it
  * into an RTP packet. besides the payloaded RTP packet there should be the
  * three events initial events: stream-start, caps and segment. because of that
@@ -1955,6 +2025,7 @@ rtp_basepayloading_suite (void)
   tcase_add_test (tc_chain, rtp_base_payload_property_ptime_multiple_test);
   tcase_add_test (tc_chain, rtp_base_payload_property_stats_test);
   tcase_add_test (tc_chain, rtp_base_payload_property_source_info_test);
+  tcase_add_test (tc_chain, rtp_base_payload_property_audio_level_id_test);
 
   tcase_add_test (tc_chain, rtp_base_payload_framerate_attribute);
   tcase_add_test (tc_chain, rtp_base_payload_max_framerate_attribute);
