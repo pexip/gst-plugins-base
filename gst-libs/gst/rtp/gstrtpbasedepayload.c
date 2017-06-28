@@ -28,6 +28,7 @@
 
 #include "gstrtpbasedepayload.h"
 #include "gstrtpmeta.h"
+#include "gstrtpaudiolevelmeta.h"
 
 GST_DEBUG_CATEGORY_STATIC (rtpbasedepayload_debug);
 #define GST_CAT_DEFAULT (rtpbasedepayload_debug)
@@ -60,6 +61,7 @@ struct _GstRTPBaseDepayloadPrivate
   GstEvent *segment_event;
 
   gboolean source_info;
+  guint8 audio_level_id;
   GstBuffer *input_buffer;
 };
 
@@ -71,6 +73,7 @@ enum
 };
 
 #define DEFAULT_SOURCE_INFO FALSE
+#define DEFAULT_AUDIO_LEVEL_ID 0
 #define DEFAULT_MAX_REORDER 100
 
 enum
@@ -79,6 +82,7 @@ enum
   PROP_STATS,
   PROP_SOURCE_INFO,
   PROP_MAX_REORDER,
+  PROP_AUDIO_LEVEL_ID,
   PROP_LAST
 };
 
@@ -188,6 +192,23 @@ gst_rtp_base_depayload_class_init (GstRTPBaseDepayloadClass * klass)
       g_param_spec_boolean ("source-info", "RTP source information",
           "Add RTP source information as buffer meta",
           DEFAULT_SOURCE_INFO, G_PARAM_READWRITE));
+
+  /**
+   * GstRTPBasePayload:audio-level-id:
+   *
+   * Specify the ID to use, reading Audio Level Indication using
+   * extensionheaders as specified by RFC 6464, and writing the information
+   * as #GstRTPAudioLevelMeta on the output buffer. The ID has to be a number
+   * between 1 and 14 (inclusive), see RFC 5285 for more information.
+   *
+   * Since: 1.12
+   **/
+  g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_AUDIO_LEVEL_ID,
+      g_param_spec_uint ("audio-level-id", "Audio Level ID",
+          "The ID to use for reading Audio Level Indications using "
+          "extensionheaders (RFC 6464). (0 = Disable)",
+          0, 14, DEFAULT_AUDIO_LEVEL_ID,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   /**
    * GstRTPBaseDepayload:max-reorder:
@@ -777,6 +798,17 @@ add_rtp_source_meta (GstBuffer * outbuf, GstBuffer * rtpbuf)
   gst_rtp_buffer_unmap (&rtp);
 }
 
+static void
+add_rtp_audio_level_meta (GstBuffer * out, GstBuffer * rtpbuf, guint8 id)
+{
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
+
+  if (!gst_rtp_buffer_map (rtpbuf, GST_MAP_READ, &rtp))
+    return;
+  gst_buffer_extract_rtp_audio_level_meta_one_byte_ext (out, &rtp, id);
+  gst_rtp_buffer_unmap (&rtp);
+}
+
 static gboolean
 set_headers (GstBuffer ** buffer, guint idx, GstRTPBaseDepayload * depayload)
 {
@@ -811,6 +843,10 @@ set_headers (GstBuffer ** buffer, guint idx, GstRTPBaseDepayload * depayload)
 
   if (priv->source_info && priv->input_buffer)
     add_rtp_source_meta (*buffer, priv->input_buffer);
+
+  if (priv->audio_level_id > 0 && priv->input_buffer)
+    add_rtp_audio_level_meta (*buffer, priv->input_buffer,
+        priv->audio_level_id);
 
   return TRUE;
 }
@@ -1034,6 +1070,9 @@ gst_rtp_base_depayload_set_property (GObject * object, guint prop_id,
     case PROP_MAX_REORDER:
       priv->max_reorder = g_value_get_int (value);
       break;
+    case PROP_AUDIO_LEVEL_ID:
+      priv->audio_level_id = g_value_get_uint (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -1061,6 +1100,9 @@ gst_rtp_base_depayload_get_property (GObject * object, guint prop_id,
       break;
     case PROP_MAX_REORDER:
       g_value_set_int (value, priv->max_reorder);
+      break;
+    case PROP_AUDIO_LEVEL_ID:
+      g_value_set_uint (value, priv->audio_level_id);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
