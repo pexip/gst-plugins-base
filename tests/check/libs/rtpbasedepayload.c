@@ -24,6 +24,7 @@
 #include <gst/rtp/gstrtpbuffer.h>
 #include <gst/rtp/gstrtpbasedepayload.h>
 #include <gst/rtp/gstrtpmeta.h>
+#include <gst/rtp/gstrtpaudiolevelmeta.h>
 
 #define DEFAULT_CLOCK_RATE (42)
 
@@ -1309,7 +1310,6 @@ GST_START_TEST (rtp_base_depayload_clock_base_test)
 }
 
 GST_END_TEST
-
 /* basedepayloader has a property source-info that will add
  * GstRTPSourceMeta to the output buffer with RTP source information, such as
  * SSRC and CSRCs. The is useful for letting downstream know about the origin
@@ -1364,6 +1364,81 @@ GST_START_TEST (rtp_base_depayload_source_info_test)
 }
 
 GST_END_TEST
+/* basedepayloader has a property audio-level-id which will make it try
+ * to extract audio level indications from the extensionheader, and add that
+ * as GstRTPAudioLevelMeta on the output buffers.
+ */
+GST_START_TEST (rtp_base_depayload_audio_level_id_test)
+{
+  GstHarness *h;
+  GstRtpDummyDepay *depay;
+  GstRTPAudioLevelMeta *in_meta;
+  GstRTPAudioLevelMeta *out_meta;
+  GstBuffer *meta_buffer;
+  GstBuffer *buffer;
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
+  guint8 id = 10;
+  guint seq = 0;
+  guint ssrc = 0xDEADBEEF;
+
+  depay = rtp_dummy_depay_new ();
+  h = gst_harness_new_with_element (GST_ELEMENT_CAST (depay), "sink", "src");
+  gst_harness_set_src_caps_str (h, "application/x-rtp");
+
+  /* create a buffer to hold the meta */
+  meta_buffer = gst_buffer_new ();
+  in_meta = gst_buffer_add_rtp_audio_level_meta (meta_buffer, 100, TRUE);
+
+  g_object_set (depay, "audio-level-id", id, NULL);
+
+  /* input has no extensionheader, should not add meta */
+  buffer = gst_rtp_buffer_new_allocate (0, 0, 0);
+  rtp_buffer_set (buffer, "seq", seq++, "ssrc", ssrc, NULL);
+  buffer = gst_harness_push_and_pull (h, buffer);
+  out_meta = gst_buffer_get_rtp_audio_level_meta (buffer);
+  fail_unless (out_meta == NULL);
+  gst_buffer_unref (buffer);
+
+  /* Input buffer has extensionheader, depayloader should add meta for the
+     right ID */
+  for (gint i = 1; i <= 14; i++) {
+    buffer = gst_rtp_buffer_new_allocate (0, 0, 0);
+    rtp_buffer_set (buffer, "seq", seq++, "ssrc", ssrc, NULL);
+    gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
+    fail_unless (gst_rtp_audio_level_meta_add_one_byte_ext (in_meta, &rtp, i));
+    gst_rtp_buffer_unmap (&rtp);
+    buffer = gst_harness_push_and_pull (h, buffer);
+    out_meta = gst_buffer_get_rtp_audio_level_meta (buffer);
+
+    if (i == id) {
+      fail_unless (out_meta);
+      fail_unless_equals_int (out_meta->level, in_meta->level);
+      fail_unless (out_meta->voice_activity == in_meta->voice_activity);
+    } else {
+      fail_unless (out_meta == NULL);
+    }
+    gst_buffer_unref (buffer);
+  }
+
+  /* property is disabled, depayloader should not add meta */
+  g_object_set (depay, "audio-level-id", 0, NULL);
+  buffer = gst_rtp_buffer_new_allocate (0, 0, 0);
+  rtp_buffer_set (buffer, "seq", seq++, "ssrc", ssrc, NULL);
+  gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
+  fail_unless (gst_rtp_audio_level_meta_add_one_byte_ext (in_meta, &rtp, id));
+  gst_rtp_buffer_unmap (&rtp);
+  buffer = gst_harness_push_and_pull (h, buffer);
+  out_meta = gst_buffer_get_rtp_audio_level_meta (buffer);
+  fail_unless (out_meta == NULL);
+  gst_buffer_unref (buffer);
+
+  gst_buffer_unref (meta_buffer);
+  g_object_unref (depay);
+  gst_harness_teardown (h);
+}
+
+GST_END_TEST;
+
 /* Test max-reorder property. Reordered packets with a gap less than
  * max-reordered will be dropped, reordered packets with gap larger than
  * max-reorder is considered coming fra a restarted sender and should not be
@@ -1450,6 +1525,7 @@ rtp_basepayloading_suite (void)
   tcase_add_test (tc_chain, rtp_base_depayload_clock_base_test);
 
   tcase_add_test (tc_chain, rtp_base_depayload_source_info_test);
+  tcase_add_test (tc_chain, rtp_base_depayload_audio_level_id_test);
   tcase_add_test (tc_chain, rtp_base_depayload_max_reorder);
 
   return s;
