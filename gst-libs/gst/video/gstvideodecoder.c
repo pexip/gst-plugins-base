@@ -2295,7 +2295,7 @@ gst_video_decoder_chain_forward (GstVideoDecoder * decoder,
     gboolean was_keyframe = FALSE;
     if (!GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_DELTA_UNIT)) {
       was_keyframe = TRUE;
-      GST_LOG_OBJECT (decoder, "Marking current_frame as sync point");
+      GST_DEBUG_OBJECT (decoder, "Marking current_frame as sync point");
       GST_VIDEO_CODEC_FRAME_SET_SYNC_POINT (priv->current_frame);
     }
 
@@ -3519,7 +3519,7 @@ gst_video_decoder_have_frame (GstVideoDecoder * decoder)
       GST_TIME_ARGS (duration));
 
   if (!GST_BUFFER_FLAG_IS_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT)) {
-    GST_LOG_OBJECT (decoder, "Marking as sync point");
+    GST_DEBUG_OBJECT (decoder, "Marking as sync point");
     GST_VIDEO_CODEC_FRAME_SET_SYNC_POINT (priv->current_frame);
   }
 
