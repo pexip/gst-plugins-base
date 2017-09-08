@@ -169,6 +169,7 @@ G_END_DECLS
 #include <gst/video/gstvideoencoder.h>
 #include <gst/video/gstvideofilter.h>
 #include <gst/video/gstvideometa.h>
+#include <gst/video/gstvideovp8meta.h>
 #include <gst/video/gstvideopool.h>
 #include <gst/video/gstvideosink.h>
 #include <gst/video/gstvideoutils.h>

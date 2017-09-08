@@ -52,7 +52,8 @@ libgstvideo_@GST_API_VERSION@_la_SOURCES = \
 	video-blend.c		\
 	video-overlay-composition.c \
 	video-multiview.c	\
-	gstvideotimecode.c
+	gstvideotimecode.c \
+	gstvideovp8meta.c
 
 nodist_libgstvideo_@GST_API_VERSION@_la_SOURCES = $(BUILT_SOURCES)
 
@@ -89,7 +90,8 @@ libgstvideo_@GST_API_VERSION@include_HEADERS = \
 	video-blend.h		\
 	video-overlay-composition.h \
 	video-multiview.h	\
-	gstvideotimecode.h
+	gstvideotimecode.h \
+	gstvideovp8meta.h
 
 nodist_libgstvideo_@GST_API_VERSION@include_HEADERS = $(built_headers)
 noinst_HEADERS = gstvideoutilsprivate.h
