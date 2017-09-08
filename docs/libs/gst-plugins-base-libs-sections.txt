@@ -3138,6 +3138,16 @@ gst_video_region_of_interest_meta_get_info
 </SECTION>
 
 <SECTION>
+<FILE>gstvideovp8meta</FILE>
+<INCLUDE>gst/video/gstvideovp8meta.h</INCLUDE>
+GstVideoVP8Meta
+gst_buffer_add_video_vp8_meta
+gst_buffer_add_video_vp8_meta_full
+gst_video_vp8_meta_api_get_type
+gst_video_vp8_meta_get_info
+</SECTION>
+
+<SECTION>
 <FILE>gstvideoaffinetransformationmeta</FILE>
 <INCLUDE>gst/video/video.h</INCLUDE>
 GstVideoAffineTransformationGetMatrix
