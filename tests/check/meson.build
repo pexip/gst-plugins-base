@@ -25,7 +25,7 @@ base_tests = [
   [ 'libs/tag.c' ],
   #  [ 'libs/video' ], # FIXME: times out, perhaps split or spawn conversions into benchmark tool and/or multiple threads
   [ 'libs/videoencoder.c' ],
-  [ 'libs/videotimecode.c' ],
+  #  [ 'libs/videotimecode.c' ],
   [ 'libs/xmpwriter.c' ],
   [ 'elements/adder.c' ],
   [ 'elements/appsink.c' ],
