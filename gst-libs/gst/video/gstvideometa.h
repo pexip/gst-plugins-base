@@ -23,7 +23,6 @@
 #include <gst/gst.h>
 
 #include <gst/video/video.h>
-#include <gst/video/gstvideotimecode.h>
 
 G_BEGIN_DECLS
 
@@ -325,52 +324,6 @@ GstVideoRegionOfInterestMeta *gst_buffer_add_video_region_of_interest_meta_id (G
                                                                                guint         y,
                                                                                guint         w,
                                                                                guint         h);
-
-/**
- * GstVideoTimeCodeMeta:
- * @meta: parent #GstMeta
- * @tc: the GstVideoTimeCode to attach
- *
- * Extra buffer metadata describing the GstVideoTimeCode of the frame.
- *
- * Each frame is assumed to have its own timecode, i.e. they are not
- * automatically incremented/interpolated.
- *
- * Since: 1.10
- */
-typedef struct {
-  GstMeta meta;
-
-  GstVideoTimeCode tc;
-} GstVideoTimeCodeMeta;
-
-GST_EXPORT
-GType              gst_video_time_code_meta_api_get_type (void);
-#define GST_VIDEO_TIME_CODE_META_API_TYPE (gst_video_time_code_meta_api_get_type())
-
-GST_EXPORT
-const GstMetaInfo *gst_video_time_code_meta_get_info (void);
-#define GST_VIDEO_TIME_CODE_META_INFO (gst_video_time_code_meta_get_info())
-
-#define gst_buffer_get_video_time_code_meta(b) \
-        ((GstVideoTimeCodeMeta*)gst_buffer_get_meta((b),GST_VIDEO_TIME_CODE_META_API_TYPE))
-
-GST_EXPORT
-GstVideoTimeCodeMeta *gst_buffer_add_video_time_code_meta    (GstBuffer             * buffer,
-                                                              GstVideoTimeCode      * tc);
-
-GST_EXPORT
-GstVideoTimeCodeMeta *
-gst_buffer_add_video_time_code_meta_full                     (GstBuffer             * buffer,
-                                                              guint fps_n,
-                                                              guint fps_d,
-                                                              GDateTime             * latest_daily_jam,
-                                                              GstVideoTimeCodeFlags   flags,
-                                                              guint                   hours,
-                                                              guint                   minutes,
-                                                              guint                   seconds,
-                                                              guint                   frames,
-                                                              guint                   field_count);
 
 G_END_DECLS
 
