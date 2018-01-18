@@ -37,6 +37,7 @@ GstRTPSourceMeta *
 gst_buffer_add_rtp_source_meta (GstBuffer * buffer, const guint32 * ssrc,
     const guint * csrc, guint csrc_count)
 {
+  gint i;
   GstRTPSourceMeta *meta;
 
   g_return_val_if_fail (buffer != NULL, NULL);
@@ -56,7 +57,7 @@ gst_buffer_add_rtp_source_meta (GstBuffer * buffer, const guint32 * ssrc,
   }
 
   meta->csrc_count = csrc_count;
-  for (gint i = 0; i < csrc_count; i++) {
+  for (i = 0; i < csrc_count; i++) {
     meta->csrc[i] = csrc[i];
   }
 
@@ -162,12 +163,13 @@ gboolean
 gst_rtp_source_meta_append_csrc (GstRTPSourceMeta * meta, const guint32 * csrc,
     guint csrc_count)
 {
+  gint i;
   guint new_csrc_count = meta->csrc_count + csrc_count;
 
   if (new_csrc_count > GST_RTP_SOURCE_META_MAX_CSRC_COUNT)
     return FALSE;
 
-  for (gint i = 0; i < csrc_count; i++)
+  for (i = 0; i < csrc_count; i++)
     meta->csrc[meta->csrc_count + i] = csrc[i];
   meta->csrc_count = new_csrc_count;
 

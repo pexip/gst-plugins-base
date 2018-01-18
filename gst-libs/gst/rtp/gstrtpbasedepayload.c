@@ -787,8 +787,9 @@ add_rtp_source_meta (GstBuffer * outbuf, GstBuffer * rtpbuf)
   ssrc = gst_rtp_buffer_get_ssrc (&rtp);
   meta = gst_buffer_add_rtp_source_meta (outbuf, &ssrc, NULL, 0);
   if (meta != NULL) {
+    gint i;
     gint csrc_count = gst_rtp_buffer_get_csrc_count (&rtp);
-    for (gint i = 0; i < csrc_count; i++) {
+    for (i = 0; i < csrc_count; i++) {
       guint32 csrc = gst_rtp_buffer_get_csrc (&rtp, i);
       gst_rtp_source_meta_append_csrc (meta, &csrc, 1);
     }

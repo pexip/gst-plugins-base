@@ -934,6 +934,7 @@ GST_END_TEST
  * concealment before any data is received is not very useful. */
 GST_START_TEST (rtp_base_depayload_packet_lost_before_first_buffer_test)
 {
+  gint i;
   GstHarness *h;
   GstEvent *event;
   GstRtpDummyDepay *depay;
@@ -946,7 +947,7 @@ GST_START_TEST (rtp_base_depayload_packet_lost_before_first_buffer_test)
   gst_harness_set_src_caps_str (h, "application/x-rtp");
 
   /* Verify that depayloader has received setup events */
-  for (gint i = 0; i < 3; i++) {
+  for (i = 0; i < 3; i++) {
     event = gst_pad_get_sticky_event (h->srcpad, etype[i], 0);
     fail_unless (event != NULL);
     gst_event_unref (event);
@@ -964,7 +965,7 @@ GST_START_TEST (rtp_base_depayload_packet_lost_before_first_buffer_test)
   gst_harness_push (h, gst_rtp_buffer_new_allocate (0, 0, 0));
 
   /* Verify that setup events are sent before gap event */
-  for (gint i = 0; i < 3; i++) {
+  for (i = 0; i < 3; i++) {
     fail_unless (event = gst_harness_pull_event (h));
     fail_unless_equals_int (GST_EVENT_TYPE (event), etype[i]);
     gst_event_unref (event);
@@ -1380,6 +1381,7 @@ GST_START_TEST (rtp_base_depayload_audio_level_id_test)
   guint8 id = 10;
   guint seq = 0;
   guint ssrc = 0xDEADBEEF;
+  gint i;
 
   depay = rtp_dummy_depay_new ();
   h = gst_harness_new_with_element (GST_ELEMENT_CAST (depay), "sink", "src");
@@ -1401,7 +1403,7 @@ GST_START_TEST (rtp_base_depayload_audio_level_id_test)
 
   /* Input buffer has extensionheader, depayloader should add meta for the
      right ID */
-  for (gint i = 1; i <= 14; i++) {
+  for (i = 1; i <= 14; i++) {
     buffer = gst_rtp_buffer_new_allocate (0, 0, 0);
     rtp_buffer_set (buffer, "seq", seq++, "ssrc", ssrc, NULL);
     gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);

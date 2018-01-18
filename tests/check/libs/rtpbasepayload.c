@@ -1863,6 +1863,7 @@ GST_START_TEST (rtp_base_payload_property_audio_level_id_test)
   GstBuffer *buffer;
   GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
   guint8 id = 10;
+  gint i;
 
   pay = rtp_dummy_pay_new ();
   h = gst_harness_new_with_element (GST_ELEMENT_CAST (pay), "sink", "src");
@@ -1885,7 +1886,7 @@ GST_START_TEST (rtp_base_payload_property_audio_level_id_test)
   fail_unless (gst_buffer_add_rtp_audio_level_meta (buffer, 100, TRUE));
   buffer = gst_harness_push_and_pull (h, buffer);
   gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
-  for (gint i = 1; i <= 14; i++) {
+  for (i = 1; i <= 14; i++) {
     meta = gst_buffer_extract_rtp_audio_level_meta_one_byte_ext (buffer,
         &rtp, i);
     if (i == id) {
@@ -1906,7 +1907,7 @@ GST_START_TEST (rtp_base_payload_property_audio_level_id_test)
   fail_unless (gst_buffer_add_rtp_audio_level_meta (buffer, 100, TRUE));
   buffer = gst_harness_push_and_pull (h, buffer);
   gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
-  for (gint i = 1; i <= 14; i++) {
+  for (i = 1; i <= 14; i++) {
     meta = gst_buffer_extract_rtp_audio_level_meta_one_byte_ext (buffer,
         &rtp, i);
     fail_unless (meta == NULL);
