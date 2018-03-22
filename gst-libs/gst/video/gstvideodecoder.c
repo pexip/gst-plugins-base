@@ -1076,6 +1076,7 @@ gst_video_decoder_report_decode_error (GstVideoDecoder * decoder,
     if (decoder->priv->req_keyunit_interval == -1)
       return;
     if (decoder->priv->req_keyunit_interval != 0 &&
+        GST_CLOCK_TIME_IS_VALID (ts) &&
         GST_CLOCK_TIME_IS_VALID (decoder->priv->wait_for_sync) &&
         GST_CLOCK_DIFF (decoder->priv->wait_for_sync, ts) <
         decoder->priv->req_keyunit_interval * GST_MSECOND)
