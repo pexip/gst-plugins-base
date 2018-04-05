@@ -356,6 +356,10 @@ void                 gst_video_encoder_set_headers (GstVideoEncoder *encoder,
 						    GList *headers);
 
 GST_VIDEO_API
+void                 gst_video_encoder_set_keyframe_rate_limit (GstVideoEncoder *encoder,
+                                                                GstClockTime limit);
+
+GST_VIDEO_API
 void                 gst_video_encoder_merge_tags  (GstVideoEncoder *encoder,
                                                     const GstTagList *tags,
                                                     GstTagMergeMode mode);
