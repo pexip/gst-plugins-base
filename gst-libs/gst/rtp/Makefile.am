@@ -11,7 +11,8 @@ libgstrtpinclude_HEADERS = \
 			gstrtpbaseaudiopayload.h \
 			gstrtpbasepayload.h \
 			gstrtpbasedepayload.h \
-			gstrtpmeta.h
+			gstrtpmeta.h \
+			gstrtpaudiolevelmeta.h
 
 lib_LTLIBRARIES = libgstrtp-@GST_API_VERSION@.la
 
@@ -22,7 +23,8 @@ libgstrtp_@GST_API_VERSION@_la_SOURCES = gstrtpbuffer.c \
 			        gstrtpbaseaudiopayload.c \
 				gstrtpbasepayload.c \
 				gstrtpbasedepayload.c \
-				gstrtpmeta.c
+				gstrtpmeta.c \
+				gstrtpaudiolevelmeta.c
 
 built_sources = gstrtp-enumtypes.c
 built_headers = gstrtp-enumtypes.h
