@@ -1,5 +1,6 @@
 /* GStreamer RTP meta unit tests
  * Copyright (C) 2016  Stian Selnes <stian@pexip.com>
+ * Copyright (C) 2017  Havard Graff <havard@pexip.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -21,6 +22,7 @@
 #include <gst/gst.h>
 #include <gst/check/gstcheck.h>
 #include <gst/rtp/rtp.h>
+#include <gst/rtp/gstrtpaudiolevelmeta.h>
 
 GST_START_TEST (test_rtp_source_meta_set_get_sources)
 {
@@ -94,6 +96,56 @@ GST_START_TEST (test_rtp_source_meta_set_get_max_sources)
 
 GST_END_TEST;
 
+GST_START_TEST (test_rtp_audio_level_meta_add_get)
+{
+  GstBuffer *in;
+  GstBuffer *rtp;
+  GstBuffer *out;
+  GstRTPAudioLevelMeta *in_meta;
+  GstRTPAudioLevelMeta *rtp_meta;
+  GstRTPAudioLevelMeta *out_meta;
+  GstRTPBuffer rtp_buf = GST_RTP_BUFFER_INIT;
+  gint id = __i__;
+  gint level = g_random_int_range (0, 128);
+  gboolean voice_activity = g_random_int_range (0, 2);
+
+  in = gst_buffer_new ();
+  rtp = gst_rtp_buffer_new_allocate (1, 0, 0);
+  out = gst_buffer_new ();
+
+  /* add audio-level meta to a buffer (-100dB, with Voice Activity) */
+  in_meta = gst_buffer_add_rtp_audio_level_meta (in, level, voice_activity);
+  fail_unless (in_meta);
+
+  rtp_meta = gst_buffer_get_rtp_audio_level_meta (in);
+  fail_unless (rtp_meta);
+  fail_unless_equals_int (in_meta->level, rtp_meta->level);
+  fail_unless (in_meta->voice_activity == rtp_meta->voice_activity);
+
+  /* write this meta into the rtp extensionheader */
+  gst_rtp_buffer_map (rtp, GST_MAP_READWRITE, &rtp_buf);
+  fail_unless (gst_rtp_audio_level_meta_add_one_byte_ext (rtp_meta, &rtp_buf,
+          id));
+  gst_rtp_buffer_unmap (&rtp_buf);
+
+  /* extract the extensionheader as a audio-level meta */
+  gst_rtp_buffer_map (rtp, GST_MAP_READWRITE, &rtp_buf);
+  out_meta =
+      gst_buffer_extract_rtp_audio_level_meta_one_byte_ext (out, &rtp_buf, id);
+  fail_unless (out_meta);
+  gst_rtp_buffer_unmap (&rtp_buf);
+
+  /* verify the audio-level information is intact */
+  fail_unless_equals_int (in_meta->level, out_meta->level);
+  fail_unless (in_meta->voice_activity == out_meta->voice_activity);
+
+  gst_buffer_unref (in);
+  gst_buffer_unref (rtp);
+  gst_buffer_unref (out);
+}
+
+GST_END_TEST;
+
 static Suite *
 rtp_meta_suite (void)
 {
@@ -103,6 +155,9 @@ rtp_meta_suite (void)
   suite_add_tcase (s, (tc_chain = tcase_create ("GstRTPSourceMeta")));
   tcase_add_test (tc_chain, test_rtp_source_meta_set_get_sources);
   tcase_add_test (tc_chain, test_rtp_source_meta_set_get_max_sources);
+
+  suite_add_tcase (s, (tc_chain = tcase_create ("GstRTPAudioLevelMeta")));
+  tcase_add_loop_test (tc_chain, test_rtp_audio_level_meta_add_get, 1, 15);
 
   return s;
 }
