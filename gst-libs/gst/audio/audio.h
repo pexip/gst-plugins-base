@@ -87,6 +87,9 @@ G_BEGIN_DECLS
  */
 #define GST_META_TAG_AUDIO_RATE_STR "rate"
 
+GST_AUDIO_API
+GQuark         gst_meta_tag_audio_quark (void);
+
 /*
  * this library defines and implements some helper functions for audio
  * handling

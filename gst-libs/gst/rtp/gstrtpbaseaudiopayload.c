@@ -153,6 +153,8 @@ static GstStateChangeReturn gst_rtp_base_payload_audio_change_state (GstElement
 static gboolean gst_rtp_base_payload_audio_sink_event (GstRTPBasePayload
     * payload, GstEvent * event);
 
+static GQuark quark_meta_tag_audio;
+
 #define gst_rtp_base_audio_payload_parent_class parent_class
 G_DEFINE_TYPE_WITH_PRIVATE (GstRTPBaseAudioPayload, gst_rtp_base_audio_payload,
     GST_TYPE_RTP_BASE_PAYLOAD);
@@ -163,6 +165,8 @@ gst_rtp_base_audio_payload_class_init (GstRTPBaseAudioPayloadClass * klass)
   GObjectClass *gobject_class;
   GstElementClass *gstelement_class;
   GstRTPBasePayloadClass *gstrtpbasepayload_class;
+
+  quark_meta_tag_audio = g_quark_from_static_string (GST_META_TAG_AUDIO_STR);
 
   gobject_class = (GObjectClass *) klass;
   gstelement_class = (GstElementClass *) klass;
@@ -489,7 +493,7 @@ foreach_metadata (GstBuffer * inbuf, GstMeta ** meta, gpointer user_data)
 
   if (info->transform_func && (!tags || (g_strv_length ((gchar **) tags) == 1
               && gst_meta_api_type_has_tag (info->api,
-                  g_quark_from_string (GST_META_TAG_AUDIO_STR))))) {
+                  quark_meta_tag_audio)))) {
     GstMetaTransformCopy copy_data = { FALSE, 0, -1 };
     GST_DEBUG_OBJECT (pay, "copy metadata %s", g_type_name (info->api));
     /* simply copy then */

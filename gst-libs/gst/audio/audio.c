@@ -310,3 +310,23 @@ gst_audio_buffer_truncate (GstBuffer * buffer, gint bpf, gsize trim,
 
   return ret;
 }
+
+/**
+ * gst_meta_tag_audio_quark:
+ *
+ * Get the #GQuark associated with %GST_META_TAG_AUDIO_STR.
+ *
+ * Returns: a #GQuark
+ *
+ * Since: 1.16
+ */
+GQuark
+gst_meta_tag_audio_quark (void)
+{
+  static GQuark value = 0;
+
+  if (value == 0)
+    value = g_quark_from_string (GST_META_TAG_AUDIO_STR);
+
+  return value;
+}
