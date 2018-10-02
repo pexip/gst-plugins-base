@@ -204,3 +204,24 @@ gst_video_alignment_reset (GstVideoAlignment * align)
   for (i = 0; i < GST_VIDEO_MAX_PLANES; i++)
     align->stride_align[i] = 0;
 }
+
+
+/**
+ * gst_meta_tag_video_quark:
+ *
+ * Get the #GQuark associated with %GST_META_TAG_VIDEO_STR.
+ *
+ * Returns: a #GQuark
+ *
+ * Since: 1.16
+ */
+GQuark
+gst_meta_tag_video_quark (void)
+{
+  static GQuark value = 0;
+
+  if (value == 0)
+    value = g_quark_from_string (GST_META_TAG_VIDEO_STR);
+
+  return value;
+}
