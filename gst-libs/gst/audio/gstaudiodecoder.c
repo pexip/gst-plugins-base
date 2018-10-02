@@ -1142,7 +1142,7 @@ gst_audio_decoder_transform_meta_default (GstAudioDecoder *
 
   if (!tags || (g_strv_length ((gchar **) tags) == 1
           && gst_meta_api_type_has_tag (info->api,
-              g_quark_from_string (GST_META_TAG_AUDIO_STR))))
+              gst_meta_tag_audio_quark ())))
     return TRUE;
 
   return FALSE;

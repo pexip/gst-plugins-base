@@ -3083,7 +3083,7 @@ gst_video_decoder_transform_meta_default (GstVideoDecoder *
 
   if (!tags || (g_strv_length ((gchar **) tags) == 1
           && gst_meta_api_type_has_tag (info->api,
-              g_quark_from_string (GST_META_TAG_VIDEO_STR))))
+              gst_meta_tag_video_quark ())))
     return TRUE;
 
   return FALSE;
