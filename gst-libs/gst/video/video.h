@@ -124,6 +124,9 @@ typedef enum {
 #define GST_META_TAG_VIDEO_COLORSPACE_STR "colorspace"
 
 GST_VIDEO_API
+GQuark         gst_meta_tag_video_quark (void);
+
+GST_VIDEO_API
 void           gst_video_alignment_reset         (GstVideoAlignment *align);
 
 
