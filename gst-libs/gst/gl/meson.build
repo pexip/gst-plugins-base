@@ -297,16 +297,14 @@ endif
 gl_dep = unneeded_dep
 glx_dep = unneeded_dep
 if need_api_opengl != 'no' or need_platform_glx != 'no'
-  if host_system == 'darwin'
-    gl_dep = dependency('OpenGL', required : false)
-  else
-    # override meson's braindead gl detection on osx/windows/etc by forcing pkg-config
-    gl_dep = dependency('gl', method: 'pkg-config', required : false)
-  endif
+  # override meson's braindead gl detection on osx/windows/etc by forcing pkg-config
+  gl_dep = dependency('gl', method: 'pkg-config', required : false)
 
   if not gl_dep.found()
     if host_system == 'windows'
       gl_dep = cc.find_library('opengl32', required : false)
+    elif host_system == 'darwin'
+      gl_dep = dependency('OpenGL', required : false)
     else
       gl_dep = cc.find_library('GL', required : false)
     endif
@@ -673,13 +671,14 @@ elif need_platform_cgl == 'no' and need_win_cocoa == 'yes'
 endif
 
 if host_system == 'darwin'
+  opengl_dep = dependency('OpenGL', required : false)
   foundation_dep = dependency('appleframeworks', modules : ['Foundation'], required : false)
   quartzcore_dep = dependency('appleframeworks', modules : ['QuartzCore'], required : false)
   corefoundation_dep = dependency('appleframeworks', modules : ['CoreFoundation'], required : false)
 
   if need_platform_cgl != 'no'
-    if foundation_dep.found() and quartzcore_dep.found() and corefoundation_dep.found()
-      gl_platform_deps += [quartzcore_dep, corefoundation_dep, foundation_dep]
+    if opengl_dep.found() and foundation_dep.found() and quartzcore_dep.found() and corefoundation_dep.found()
+      gl_platform_deps += [opengl_dep, quartzcore_dep, corefoundation_dep, foundation_dep]
       enabled_gl_platforms += 'cgl'
       glconf.set10('GST_GL_HAVE_PLATFORM_CGL', 1)
 
