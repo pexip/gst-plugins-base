@@ -761,6 +761,11 @@ add_rtp_source_meta (GstBuffer * outbuf, GstBuffer * rtpbuf)
     return;
 
   ssrc = gst_rtp_buffer_get_ssrc (&rtp);
+
+  /* remove any pre-existing source-meta */
+  while ((meta = gst_buffer_get_rtp_source_meta (outbuf)))
+    gst_buffer_remove_meta (outbuf, (GstMeta *) meta);
+
   meta = gst_buffer_add_rtp_source_meta (outbuf, &ssrc, NULL, 0);
   if (meta != NULL) {
     gint i;
