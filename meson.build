@@ -415,7 +415,9 @@ if find_program('xgettext', required : get_option('nls')).found()
   core_conf.set('ENABLE_NLS', 1)
   subdir('po')
 endif
-subdir('docs')
+if not get_option('doc').disabled()
+  subdir('docs')
+endif
 
 # Use core_conf after all subdirs have set values
 configure_file(output : 'config.h', configuration : core_conf)
