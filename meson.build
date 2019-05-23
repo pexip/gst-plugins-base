@@ -416,7 +416,9 @@ if find_program('xgettext', required : get_option('nls')).found()
   core_conf.set('ENABLE_NLS', 1)
   subdir('po')
 endif
-subdir('docs')
+if not get_option('doc').disabled()
+  subdir('docs')
+endif
 
 if have_orcc
   update_orc_dist_files = find_program('scripts/update-orc-dist-files.py')
