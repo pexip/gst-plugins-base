@@ -331,7 +331,7 @@ push_buffer_full (State * state, GstFlowReturn expected,
     const gchar * field, ...)
 {
   GstBuffer *buf = gst_rtp_buffer_new_allocate (0, 0, 0);
-  GstRTPBuffer rtp = { NULL };
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
   gboolean mapped = FALSE;
   va_list var_args;
 
@@ -386,7 +386,7 @@ static void
 push_buffer_list (State * state, const gchar * field, ...)
 {
   GstBuffer *buf = gst_rtp_buffer_new_allocate (0, 0, 0);
-  GstRTPBuffer rtp = { NULL };
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
   gboolean mapped = FALSE;
   GstBufferList *list;
   va_list var_args;
@@ -449,7 +449,7 @@ validate_buffers_received (guint received_buffers)
 static void
 validate_buffer_valist (GstBuffer * buf, const gchar * field, va_list var_args)
 {
-  GstRTPBuffer rtp = { NULL };
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
   gboolean mapped = FALSE;
 
   while (field) {
@@ -534,7 +534,7 @@ static void
 get_buffer_field (guint index, const gchar * field, ...)
 {
   GstBuffer *buf;
-  GstRTPBuffer rtp = { NULL };
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
   gboolean mapped = FALSE;
   va_list var_args;
 
