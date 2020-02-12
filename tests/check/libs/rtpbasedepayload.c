@@ -121,7 +121,7 @@ static GstBuffer *
 gst_rtp_dummy_depay_process (GstRTPBaseDepayload * depayload, GstBuffer * buf)
 {
   GstRtpDummyDepay *self = GST_RTP_DUMMY_DEPAY (depayload);
-  GstRTPBuffer rtp = { NULL };
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
   GstBuffer *outbuf;
   guint32 rtptime;
   guint i;
@@ -350,7 +350,7 @@ static void
 rtp_buffer_set_valist (GstBuffer * buf, const gchar * field, va_list var_args,
     gboolean * extra_ref_)
 {
-  GstRTPBuffer rtp = { NULL };
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
   gboolean mapped = FALSE;
   gboolean extra_ref = FALSE;
 
