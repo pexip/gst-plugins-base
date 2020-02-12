@@ -279,12 +279,12 @@ validate_event (guint index, const gchar * name, const gchar * field, ...)
       gdouble expected = va_arg (var_args, gdouble);
       const GstSegment *segment;
       gst_event_parse_segment (event, &segment);
-      fail_unless_equals_uint64 (segment->applied_rate, expected);
+      fail_unless_equals_float (segment->applied_rate, expected);
     } else if (!g_strcmp0 (field, "rate")) {
       gdouble expected = va_arg (var_args, gdouble);
       const GstSegment *segment;
       gst_event_parse_segment (event, &segment);
-      fail_unless_equals_uint64 (segment->rate, expected);
+      fail_unless_equals_float (segment->rate, expected);
     } else if (!g_strcmp0 (field, "base")) {
       GstClockTime expected = va_arg (var_args, GstClockTime);
       const GstSegment *segment;
