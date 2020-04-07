@@ -38,7 +38,7 @@ GST_START_TEST (test_rtp_buffer)
   GstMapInfo map;
   guint8 *data;
   gsize size;
-  GstRTPBuffer rtp = { NULL, };
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
 
   /* check GstRTPHeader structure alignment and packing */
   buf = gst_rtp_buffer_new_allocate (16, 4, 0);
@@ -265,7 +265,7 @@ GST_START_TEST (test_rtp_buffer_set_extension_data)
   guint8 misc_data[4] = { 1, 2, 3, 4 };
   gpointer pointer;
   guint8 appbits;
-  GstRTPBuffer rtp = { NULL, };
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
 
   /* check GstRTPHeader structure alignment and packing */
   buf = gst_rtp_buffer_new_allocate (4, 0, 0);
@@ -694,7 +694,7 @@ GST_START_TEST (test_rtcp_buffer)
 {
   GstBuffer *buf;
   GstRTCPPacket packet;
-  GstRTCPBuffer rtcp = { NULL, };
+  GstRTCPBuffer rtcp = GST_RTCP_BUFFER_INIT;
   gsize offset;
   gsize maxsize;
 
@@ -798,7 +798,7 @@ GST_START_TEST (test_rtcp_reduced_buffer)
 {
   GstBuffer *buf;
   GstRTCPPacket packet;
-  GstRTCPBuffer rtcp = { NULL, };
+  GstRTCPBuffer rtcp = GST_RTCP_BUFFER_INIT;
   gsize offset;
   gsize maxsize;
 
@@ -1604,7 +1604,7 @@ GST_START_TEST (test_rtp_ntp64_extension)
   GstBuffer *buf;
   gpointer data;
   guint size;
-  GstRTPBuffer rtp = { NULL, };
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
   guint8 bytes[] = { 0x01, 0x23, 0x45, 0x67, 0x89, 0x01, 0x23, 0x45 };
   guint64 ntptime;
   guint8 hdrext_ntp64[GST_RTP_HDREXT_NTP_64_SIZE];
@@ -1643,7 +1643,7 @@ GST_START_TEST (test_rtp_ntp56_extension)
   GstBuffer *buf;
   gpointer data;
   guint size;
-  GstRTPBuffer rtp = { NULL, };
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
   guint8 bytes[] = { 0x23, 0x45, 0x67, 0x89, 0x01, 0x23, 0x45 };
   guint64 ntptime;
   guint8 hdrext_ntp56[GST_RTP_HDREXT_NTP_56_SIZE];
@@ -1685,7 +1685,7 @@ GST_START_TEST (test_rtp_buffer_get_extension_bytes)
   guint size;
   guint8 misc_data[4] = { 1, 2, 3, 4 };
   gpointer pointer;
-  GstRTPBuffer rtp = { NULL, };
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
   GBytes *gb;
   gsize gb_size;
 
@@ -1753,7 +1753,7 @@ GST_START_TEST (test_rtp_buffer_get_payload_bytes)
   GstMapInfo map;
   gconstpointer data;
   gsize size;
-  GstRTPBuffer rtp = { NULL, };
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
   GBytes *gb;
 
   /* create empty RTP buffer, i.e. no payload */
@@ -1800,7 +1800,7 @@ GST_END_TEST;
 
 GST_START_TEST (test_rtp_buffer_empty_payload)
 {
-  GstRTPBuffer rtp = { NULL };
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
   GstBuffer *paybuf, *outbuf;
 
   paybuf = gst_rtp_buffer_new_allocate (0, 0, 0);
