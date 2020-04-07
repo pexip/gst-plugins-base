@@ -1715,7 +1715,7 @@ gst_rtp_buffer_add_extension_twobytes_header (GstRTPBuffer * rtp,
 /**
  * gst_rtp_buffer_video_roi_meta_to_one_byte_ext:
  * @rtp: a #GstRTPBuffer to write a ROI header extension to.
- * @buf: a #GstBuffer to extract #GstVideoRegionOfInterestMeta from.
+ * @buffer: a #GstBuffer to extract #GstVideoRegionOfInterestMeta from.
  * @id: The ID of the header extension to be added (between 1 and 14).
  *
  * Tries to read #GstVideoRegionOfInterestMeta from to the @buffer, and
@@ -1728,7 +1728,7 @@ gst_rtp_buffer_add_extension_twobytes_header (GstRTPBuffer * rtp,
  */
 gboolean
 gst_rtp_buffer_video_roi_meta_to_one_byte_ext (GstRTPBuffer * rtp,
-    GstBuffer * buf, guint8 id)
+    GstBuffer * buffer, guint8 id)
 {
   GstVideoRegionOfInterestMeta *meta;
   gpointer state = NULL;
@@ -1740,7 +1740,7 @@ gst_rtp_buffer_video_roi_meta_to_one_byte_ext (GstRTPBuffer * rtp,
   g_return_val_if_fail (id <= 14, FALSE);
 
   while ((meta = (GstVideoRegionOfInterestMeta *)
-          gst_buffer_iterate_meta_filtered (buf, &state,
+          gst_buffer_iterate_meta_filtered (buffer, &state,
               GST_VIDEO_REGION_OF_INTEREST_META_API_TYPE))) {
     guint8 data[9];
     GST_WRITE_UINT16_BE (&data[0], meta->x);
