@@ -6,7 +6,7 @@ opus_sources = [
   'gstopusheader.c',
 ]
 
-opus_dep = dependency('opus-sse', version : '>= 0.9.4', required : get_option('opus'), static : true)
+opus_dep = dependency('opus-avx', version : '>= 0.9.4', required : get_option('opus'), static : true)
 
 if opus_dep.found()
   gstopus = library('gstopus',
