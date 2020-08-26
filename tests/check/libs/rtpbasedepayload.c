@@ -26,8 +26,19 @@
 #include <gst/check/gstharness.h>
 #include <gst/rtp/rtp.h>
 #include <gst/rtp/gstrtpaudiolevelmeta.h>
+#include <gst/video/gstvideometa.h>
 
 #define DEFAULT_CLOCK_RATE (42)
+
+#define fail_unless_equals_roi_meta(expected_roi, actual_meta)                 \
+G_STMT_START {                                                                 \
+  fail_unless ((actual_meta), "'"#actual_meta"' is nil");                      \
+  fail_unless_equals_int ((actual_meta)->roi_type, (expected_roi).type);       \
+  fail_unless_equals_int ((actual_meta)->x, (expected_roi).x);                 \
+  fail_unless_equals_int ((actual_meta)->y, (expected_roi).y);                 \
+  fail_unless_equals_int ((actual_meta)->w, (expected_roi).w);                 \
+  fail_unless_equals_int ((actual_meta)->h, (expected_roi).h);                 \
+} G_STMT_END;
 
 /* GstRtpDummyDepay */
 
@@ -1515,6 +1526,97 @@ GST_START_TEST (rtp_base_depayload_audio_level_id_test)
 
 GST_END_TEST;
 
+typedef struct
+{
+  guint type;
+  guint x;
+  guint y;
+  guint w;
+  guint h;
+} RoI;
+
+/* basedepayloader has a property roi-ext-id which will make it try
+ * to extract RoI meta from the extensionheader, and add that
+ * as GstVideoRegionOfInterestMeta on the output buffers.
+ */
+GST_START_TEST (rtp_base_depayload_roi_ext_id_test)
+{
+  GstHarness *h;
+  GstRtpDummyDepay *depay;
+  GstVideoRegionOfInterestMeta *in_meta;
+  GstVideoRegionOfInterestMeta *out_meta;
+  GstBuffer *buffer;
+  GstBuffer *buffer_with_meta;
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
+  guint8 ext_id = 10;
+  guint8 id = 5;
+  RoI roi = { id, 50, 50, 500, 500 };
+  guint seq = 0;
+  guint ssrc = 0xDEADBEEF;
+  gint i;
+
+  depay = rtp_dummy_depay_new ();
+  h = gst_harness_new_with_element (GST_ELEMENT_CAST (depay), "sink", "src");
+  gst_harness_set_src_caps_str (h, "application/x-rtp");
+
+  g_object_set (depay, "roi-ext-id", ext_id, NULL);
+
+  /* Input has no extensionheader, should not add meta */
+  buffer = gst_rtp_buffer_new_allocate (0, 0, 0);
+  rtp_buffer_set (buffer, "seq", seq++, "ssrc", ssrc, NULL);
+  buffer = gst_harness_push_and_pull (h, buffer);
+  out_meta = gst_buffer_get_video_region_of_interest_meta (buffer);
+  fail_if (out_meta);
+  gst_buffer_unref (buffer);
+
+  /* Input buffer has extensionheader, depayloader should add meta for the
+     right ID */
+  buffer_with_meta = gst_buffer_new ();
+  in_meta = gst_buffer_add_video_region_of_interest_meta_id (buffer_with_meta,
+      id, roi.x, roi.y, roi.w, roi.h);
+  fail_unless_equals_roi_meta (roi, in_meta);
+  fail_unless_equals_roi_meta (roi,
+      gst_buffer_get_video_region_of_interest_meta (buffer_with_meta));
+
+  for (i = 1; i <= 14; i++) {
+    buffer = gst_rtp_buffer_new_allocate (0, 0, 0);
+    rtp_buffer_set (buffer, "seq", seq++, "ssrc", ssrc, NULL);
+    gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
+    fail_unless (gst_rtp_buffer_video_roi_meta_to_one_byte_ext (&rtp,
+            buffer_with_meta, i));
+    gst_rtp_buffer_unmap (&rtp);
+    buffer = gst_harness_push_and_pull (h, buffer);
+    out_meta = gst_buffer_get_video_region_of_interest_meta (buffer);
+
+    if (i == ext_id) {
+      fail_unless (out_meta);
+      fail_unless_equals_roi_meta (roi, out_meta);
+    } else {
+      fail_unless (out_meta == NULL);
+    }
+    gst_buffer_unref (buffer);
+  }
+
+  /* Property is disabled, depayloader should not add meta */
+  g_object_set (depay, "roi-ext-id", 0, NULL);
+  buffer = gst_rtp_buffer_new_allocate (0, 0, 0);
+  rtp_buffer_set (buffer, "seq", seq++, "ssrc", ssrc, NULL);
+  gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
+  fail_unless (gst_rtp_buffer_video_roi_meta_to_one_byte_ext (&rtp,
+          buffer_with_meta, ext_id));
+  gst_rtp_buffer_unmap (&rtp);
+  buffer = gst_harness_push_and_pull (h, buffer);
+  out_meta = gst_buffer_get_video_region_of_interest_meta (buffer);
+  fail_unless (out_meta == NULL);
+  gst_buffer_unref (buffer);
+
+  gst_buffer_unref (buffer_with_meta);
+  g_object_unref (depay);
+  gst_harness_teardown (h);
+}
+
+GST_END_TEST;
+
 /* Test max-reorder property. Reordered packets with a gap less than
  * max-reordered will be dropped, reordered packets with gap larger than
  * max-reorder is considered coming fra a restarted sender and should not be
@@ -1650,6 +1752,7 @@ rtp_basepayloading_suite (void)
   tcase_add_test (tc_chain, rtp_base_depayload_source_info_test);
   tcase_add_test (tc_chain, rtp_base_depayload_source_info_from_rtp_only);
   tcase_add_test (tc_chain, rtp_base_depayload_audio_level_id_test);
+  tcase_add_test (tc_chain, rtp_base_depayload_roi_ext_id_test);
   tcase_add_test (tc_chain, rtp_base_depayload_max_reorder);
 
   tcase_add_test (tc_chain, rtp_base_depayload_flow_return_push_func);

@@ -26,9 +26,20 @@
 #include <gst/check/gstharness.h>
 #include <gst/rtp/rtp.h>
 #include <gst/rtp/gstrtpaudiolevelmeta.h>
+#include <gst/video/gstvideometa.h>
 
 #define DEFAULT_CLOCK_RATE (42)
 #define BUFFER_BEFORE_LIST (10)
+
+#define fail_unless_equals_roi_meta(expected_roi, actual_meta)                 \
+G_STMT_START {                                                                 \
+  fail_unless ((actual_meta), "'"#actual_meta"' is nil");                      \
+  fail_unless_equals_int ((actual_meta)->roi_type, (expected_roi).type);       \
+  fail_unless_equals_int ((actual_meta)->x, (expected_roi).x);                 \
+  fail_unless_equals_int ((actual_meta)->y, (expected_roi).y);                 \
+  fail_unless_equals_int ((actual_meta)->w, (expected_roi).w);                 \
+  fail_unless_equals_int ((actual_meta)->h, (expected_roi).h);                 \
+} G_STMT_END;
 
 /* GstRtpDummyPay */
 
@@ -2086,6 +2097,103 @@ GST_START_TEST (rtp_base_payload_property_twcc_ext_id_test)
 
 GST_END_TEST;
 
+typedef struct
+{
+  guint type;
+  guint x;
+  guint y;
+  guint w;
+  guint h;
+} RoI;
+
+#define ROI_EXTMAP_STR "TBD"
+
+GST_START_TEST (rtp_base_payload_property_roi_ext_id_test)
+{
+  GstHarness *h;
+  GstRtpDummyPay *pay;
+  GstBuffer *buf;
+  GstBuffer *tmp_buf;
+  GstVideoRegionOfInterestMeta *meta;
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
+  GstCaps *caps, *expected_caps;
+  gboolean meta_present;
+  guint8 ext_id = 10;
+  gint id = 0xAF;
+  RoI roi = { id, 50, 50, 500, 500 };
+  guint i;
+
+  pay = rtp_dummy_pay_new ();
+  g_object_set (pay, "roi-ext-id", ext_id, NULL);
+
+  h = gst_harness_new_with_element (GST_ELEMENT_CAST (pay), "sink", "src");
+  gst_harness_set_src_caps_str (h, "application/x-rtp");
+
+  /* Input buffer has no RoI meta, payloader should not add any extensionheaders */
+  buf = gst_harness_push_and_pull (h, gst_buffer_new ());
+  gst_rtp_buffer_map (buf, GST_MAP_READWRITE, &rtp);
+  for (i = 1; i < 15; i++) {
+    meta_present =
+        gst_rtp_buffer_video_roi_meta_from_one_byte_ext (&rtp, buf, i);
+    meta = gst_buffer_get_video_region_of_interest_meta (buf);
+    fail_if (meta_present);
+    fail_unless (meta == NULL);
+  }
+  gst_rtp_buffer_unmap (&rtp);
+  gst_buffer_unref (buf);
+
+  /* Input buffer has RoI meta, payloader should add extensionheaders for the
+   * right ID */
+  buf = gst_buffer_new ();
+  meta = gst_buffer_add_video_region_of_interest_meta_id (buf,
+      id, roi.x, roi.y, roi.w, roi.h);
+  fail_unless_equals_roi_meta (roi, meta);
+  fail_unless_equals_roi_meta (roi,
+      gst_buffer_get_video_region_of_interest_meta (buf));
+  tmp_buf = gst_buffer_new ();
+  buf = gst_harness_push_and_pull (h, buf);
+  gst_rtp_buffer_map (buf, GST_MAP_READWRITE, &rtp);
+  meta_present =
+      gst_rtp_buffer_video_roi_meta_from_one_byte_ext (&rtp, tmp_buf, ext_id);
+  meta = gst_buffer_get_video_region_of_interest_meta (tmp_buf);
+  fail_unless (meta);
+  fail_unless_equals_roi_meta (roi, meta);
+  gst_rtp_buffer_unmap (&rtp);
+  gst_buffer_unref (tmp_buf);
+  gst_buffer_unref (buf);
+
+  /* Payloader sets roi-ext-id to its default, all RoI meta should be ignored */
+  g_object_set (pay, "roi-ext-id", 0, NULL);
+  buf = gst_buffer_new ();
+  meta = gst_buffer_add_video_region_of_interest_meta_id (buf,
+      id, roi.x, roi.y, roi.w, roi.h);
+  fail_unless_equals_roi_meta (roi, meta);
+  tmp_buf = gst_buffer_new ();
+  buf = gst_harness_push_and_pull (h, buf);
+  gst_rtp_buffer_map (buf, GST_MAP_READWRITE, &rtp);
+  for (i = 1; i < 15; i++) {
+    meta_present =
+        gst_rtp_buffer_video_roi_meta_from_one_byte_ext (&rtp, tmp_buf, i);
+    meta = gst_buffer_get_video_region_of_interest_meta (tmp_buf);
+    fail_if (meta);
+  }
+  gst_rtp_buffer_unmap (&rtp);
+  gst_buffer_unref (buf);
+  gst_buffer_unref (tmp_buf);
+
+  /* Verify the presence of the roi-ext-id in caps */
+  caps = gst_pad_get_current_caps (GST_PAD_PEER (h->sinkpad));
+  expected_caps = gst_caps_from_string ("application/x-rtp, "
+      "extmap-10=" ROI_EXTMAP_STR "");
+  fail_unless (gst_caps_is_subset (caps, expected_caps));
+  gst_caps_unref (caps);
+  gst_caps_unref (expected_caps);
+
+  g_object_unref (pay);
+  gst_harness_teardown (h);
+}
+
+GST_END_TEST;
 
 static Suite *
 rtp_basepayloading_suite (void)
@@ -2122,6 +2230,7 @@ rtp_basepayloading_suite (void)
   tcase_add_test (tc_chain, rtp_base_payload_property_stats_test);
   tcase_add_test (tc_chain, rtp_base_payload_property_source_info_test);
   tcase_add_test (tc_chain, rtp_base_payload_property_twcc_ext_id_test);
+  tcase_add_test (tc_chain, rtp_base_payload_property_roi_ext_id_test);
   tcase_add_test (tc_chain, rtp_base_payload_property_audio_level_id_test);
 
   tcase_add_test (tc_chain, rtp_base_payload_framerate_attribute);
