@@ -27,6 +27,7 @@
 #include <string.h>
 
 #include <gst/rtp/gstrtpbuffer.h>
+#include <gst/video/gstvideometa.h>
 
 #include "gstrtpbasepayload.h"
 #include "gstrtpmeta.h"
@@ -50,6 +51,7 @@ struct _GstRTPBasePayloadPrivate
   guint8 audio_level_id;
   GstBuffer *input_meta_buffer;
   guint8 twcc_ext_id;
+  guint8 roi_ext_id;
 
   guint64 base_offset;
   gint64 base_rtime;
@@ -74,9 +76,11 @@ struct _GstRTPBasePayloadPrivate
 /* RTPBasePayload signals and args */
 enum
 {
-  /* FILL ME */
+  SIGNAL_ROI_EXT_HDR_WRITE,
   LAST_SIGNAL
 };
+
+static guint gst_rtp_base_payload_signals[LAST_SIGNAL] = { 0 };
 
 /* FIXME 0.11, a better default is the Ethernet MTU of
  * 1500 - sizeof(headers) as pointed out by marcelm in IRC:
@@ -97,6 +101,7 @@ enum
 #define DEFAULT_SOURCE_INFO             FALSE
 #define DEFAULT_ONVIF_NO_RATE_CONTROL   FALSE
 #define DEFAULT_TWCC_EXT_ID             0
+#define DEFAULT_ROI_EXT_ID              0
 #define DEFAULT_SCALE_RTPTIME           TRUE
 #define DEFAULT_AUDIO_LEVEL_ID          0
 
@@ -118,6 +123,7 @@ enum
   PROP_SOURCE_INFO,
   PROP_ONVIF_NO_RATE_CONTROL,
   PROP_TWCC_EXT_ID,
+  PROP_ROI_EXT_ID,
   PROP_SCALE_RTPTIME,
   PROP_AUDIO_LEVEL_ID,
   PROP_LAST
@@ -352,10 +358,10 @@ gst_rtp_base_payload_class_init (GstRTPBasePayloadClass * klass)
    *
    * The RTP header-extension ID used for tagging buffers with Transport-Wide
    * Congestion Control sequence-numbers.
-   * 
+   *
    * To use this across multiple bundled streams (transport wide), the
    * GstRTPFunnel can mux TWCC sequence-numbers together.
-   * 
+   *
    * This is experimental, as it is still a draft and not yet a standard.
    *
    * Since: 1.18
@@ -369,17 +375,34 @@ gst_rtp_base_payload_class_init (GstRTPBasePayloadClass * klass)
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   /**
+   * GstRTPBasePayload:roi-ext-id:
+   *
+   * The RTP header-extension ID used for tagging buffers with RoI meta
+   *
+   * This is experimental, as it is still a draft and not yet a standard.
+   *
+   * Since: 1.18
+   */
+  g_object_class_install_property (gobject_class, PROP_ROI_EXT_ID,
+      g_param_spec_uint ("roi-ext-id",
+          "RoI meta extension ID (experimental)",
+          "The RTP header-extension ID to use for tagging buffers with "
+          "RoI meta (0 = disable)",
+          0, 14, DEFAULT_ROI_EXT_ID,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  /**
    * GstRTPBasePayload:scale-rtptime:
    *
    * Make the RTP packets' timestamps be scaled with the segment's rate
    * (corresponding to RTSP speed parameter). Disabling this property means
    * the timestamps will not be affected by the set delivery speed (RTSP speed).
-   * 
-   * Example: A server wants to allow streaming a recorded video in double 
-   * speed but still have the timestamps correspond to the position in the 
-   * video. This is achieved by the client setting RTSP Speed to 2 while the 
+   *
+   * Example: A server wants to allow streaming a recorded video in double
+   * speed but still have the timestamps correspond to the position in the
+   * video. This is achieved by the client setting RTSP Speed to 2 while the
    * server has this property disabled.
-   * 
+   *
    * Since: 1.18
    */
   g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_SCALE_RTPTIME,
@@ -403,6 +426,20 @@ gst_rtp_base_payload_class_init (GstRTPBasePayloadClass * klass)
           "extensionheaders (RFC 6464). (0 = Disable)",
           0, 14, DEFAULT_AUDIO_LEVEL_ID,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  /**
+   * GstRTPBasePayload::roi-ext-hdr-write
+   * @object: the #GstRTPBasePayload
+   * @buffer: the #GstBuffer containing metas only
+   * @rtp_buffer: the #GstBuffer where the hdr is writen to
+   * @ext_id: the RTP header extension ID
+   *
+   * Allow application to provide a custom writer for roi-hdr-ext
+   **/
+  gst_rtp_base_payload_signals[SIGNAL_ROI_EXT_HDR_WRITE] =
+      g_signal_new ("roi-ext-hdr-write", G_TYPE_FROM_CLASS (klass),
+      G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_generic,
+      G_TYPE_NONE, 3, GST_TYPE_BUFFER, G_TYPE_POINTER, G_TYPE_UINT);
 
   gstelement_class->change_state = gst_rtp_base_payload_change_state;
 
@@ -743,7 +780,7 @@ gst_rtp_base_payload_chain (GstPad * pad, GstObject * parent,
   if (!priv->negotiated)
     goto not_negotiated;
 
-  if (priv->source_info || priv->audio_level_id > 0) {
+  if (priv->source_info || priv->audio_level_id > 0 || priv->roi_ext_id > 0) {
     /* Save a copy of meta (instead of taking an extra reference before
      * handle_buffer) to make the meta available when allocating a output
      * buffer. */
@@ -893,6 +930,14 @@ gst_rtp_base_payload_set_outcaps (GstRTPBasePayload * payload,
   gst_caps_unref (srccaps);
 
   return gst_rtp_base_payload_negotiate (payload);
+}
+
+static void
+_set_caps_from_ext_id (GstCaps * caps, guint8 ext_id, const gchar * url)
+{
+  gchar *name = g_strdup_printf ("extmap-%u", (guint) ext_id);
+  gst_caps_set_simple (caps, name, G_TYPE_STRING, url, NULL);
+  g_free (name);
 }
 
 static gboolean
@@ -1185,14 +1230,16 @@ gst_rtp_base_payload_negotiate (GstRTPBasePayload * payload)
 
   update_max_ptime (payload);
 
-
   if (payload->priv->twcc_ext_id > 0) {
     /* TODO: put this as a separate utility-function for RTP extensions */
-    gchar *name = g_strdup_printf ("extmap-%u", payload->priv->twcc_ext_id);
-    gst_caps_set_simple (srccaps, name, G_TYPE_STRING,
-        "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01",
-        NULL);
-    g_free (name);
+    _set_caps_from_ext_id (srccaps,
+        payload->priv->twcc_ext_id,
+        "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01");
+  }
+
+  if (payload->priv->roi_ext_id > 0) {
+    _set_caps_from_ext_id (srccaps,
+        payload->priv->roi_ext_id, "TBD:draft-ford-avtcore-roi-extension-00");
   }
 
   res = gst_pad_set_caps (GST_RTP_BASE_PAYLOAD_SRCPAD (payload), srccaps);
@@ -1243,6 +1290,7 @@ typedef struct
   guint64 offset;
   guint32 rtptime;
   guint8 twcc_ext_id;
+  guint8 roi_ext_id;
 } HeaderData;
 
 static gboolean
@@ -1342,6 +1390,7 @@ gst_rtp_base_payload_prepare_push (GstRTPBasePayload * payload,
   data.ssrc = payload->current_ssrc;
   data.pt = payload->pt;
   data.twcc_ext_id = priv->twcc_ext_id;
+  data.roi_ext_id = priv->roi_ext_id;
 
   /* find the first buffer with a timestamp */
   if (is_list) {
@@ -1583,7 +1632,31 @@ gst_rtp_base_payload_allocate_output_buffer (GstRTPBasePayload * payload,
   if (buffer == NULL)
     buffer = gst_rtp_buffer_new_allocate (payload_len, pad_len, csrc_count);
 
-  if (priv->audio_level_id > 0 && priv->input_meta_buffer != NULL) {
+  /* Add roi-ext */
+  if (priv->input_meta_buffer && priv->roi_ext_id > 0) {
+    const GstMetaInfo *roi_info = GST_VIDEO_REGION_OF_INTEREST_META_INFO;
+    GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
+
+    gboolean writer_roi_ext = g_signal_handler_find (payload, G_SIGNAL_MATCH_ID,
+        gst_rtp_base_payload_signals[SIGNAL_ROI_EXT_HDR_WRITE],
+        0, NULL, NULL, NULL);
+
+    if (gst_buffer_get_n_meta (priv->input_meta_buffer, roi_info->api) > 0) {
+      gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
+      if (writer_roi_ext) {
+        g_signal_emit (payload,
+            gst_rtp_base_payload_signals[SIGNAL_ROI_EXT_HDR_WRITE], 0,
+            priv->input_meta_buffer, &rtp, (guint) priv->roi_ext_id);
+      } else {
+        gst_rtp_buffer_video_roi_meta_to_one_byte_ext (&rtp,
+            priv->input_meta_buffer, priv->roi_ext_id);
+      }
+      gst_rtp_buffer_unmap (&rtp);
+    }
+  }
+
+  /* Add audio-level-ext */
+  if (priv->input_meta_buffer && priv->audio_level_id > 0) {
     GstRTPAudioLevelMeta *audio_meta =
         gst_buffer_get_rtp_audio_level_meta (priv->input_meta_buffer);
     if (audio_meta != NULL) {
@@ -1678,6 +1751,9 @@ gst_rtp_base_payload_set_property (GObject * object, guint prop_id,
     case PROP_TWCC_EXT_ID:
       priv->twcc_ext_id = g_value_get_uint (value);
       break;
+    case PROP_ROI_EXT_ID:
+      priv->roi_ext_id = g_value_get_uint (value);
+      break;
     case PROP_SCALE_RTPTIME:
       priv->scale_rtptime = g_value_get_boolean (value);
       break;
@@ -1756,6 +1832,9 @@ gst_rtp_base_payload_get_property (GObject * object, guint prop_id,
       break;
     case PROP_TWCC_EXT_ID:
       g_value_set_uint (value, priv->twcc_ext_id);
+      break;
+    case PROP_ROI_EXT_ID:
+      g_value_set_uint (value, priv->roi_ext_id);
       break;
     case PROP_SCALE_RTPTIME:
       g_value_set_boolean (value, priv->scale_rtptime);

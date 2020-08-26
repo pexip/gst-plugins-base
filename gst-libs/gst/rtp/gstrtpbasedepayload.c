@@ -36,6 +36,8 @@
 GST_DEBUG_CATEGORY_STATIC (rtpbasedepayload_debug);
 #define GST_CAT_DEFAULT (rtpbasedepayload_debug)
 
+#define ROI_EXTMAP_STR "TBD:draft-ford-avtcore-roi-extension-00"
+
 struct _GstRTPBaseDepayloadPrivate
 {
   GstClockTime npt_start;
@@ -64,6 +66,7 @@ struct _GstRTPBaseDepayloadPrivate
 
   gboolean source_info;
   guint8 audio_level_id;
+  guint8 roi_ext_id;
   GstBuffer *input_buffer;
 
   GstFlowReturn process_flow_ret;
@@ -72,12 +75,15 @@ struct _GstRTPBaseDepayloadPrivate
 /* Filter signals and args */
 enum
 {
-  /* FILL ME */
+  SIGNAL_ROI_EXT_HDR_READ,
   LAST_SIGNAL
 };
 
+static guint gst_rtp_base_depayload_signals[LAST_SIGNAL] = { 0 };
+
 #define DEFAULT_SOURCE_INFO FALSE
 #define DEFAULT_AUDIO_LEVEL_ID 0
+#define DEFAULT_ROI_EXT_ID 0
 #define DEFAULT_MAX_REORDER 100
 
 enum
@@ -87,6 +93,7 @@ enum
   PROP_SOURCE_INFO,
   PROP_MAX_REORDER,
   PROP_AUDIO_LEVEL_ID,
+  PROP_ROI_EXT_ID,
   PROP_LAST
 };
 
@@ -213,7 +220,22 @@ gst_rtp_base_depayload_class_init (GstRTPBaseDepayloadClass * klass)
           DEFAULT_SOURCE_INFO, G_PARAM_READWRITE));
 
   /**
-   * GstRTPBasePayload:audio-level-id:
+   * GstRTPBaseDepayload:roi-ext-id:
+   *
+   * Specift the ID to use, reading RoI meta using extensionheaders,
+   * and writing the information as #GstVideoRegionOfInterestMeta on the output
+   * buffer. The ID has to be a number between 0 and 14 (inclusive).
+   *
+   * Since: 1.18
+   **/
+  g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_ROI_EXT_ID,
+      g_param_spec_uint ("roi-ext-id", "RoI meta extension ID (experimental)",
+          "The RTP header-extension ID to use for reading RoI meta (0 = Disable)",
+          0, 14, DEFAULT_ROI_EXT_ID,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  /**
+   * GstRTPBaseDepayload:audio-level-id:
    *
    * Specify the ID to use, reading Audio Level Indication using
    * extensionheaders as specified by RFC 6464, and writing the information
@@ -243,6 +265,20 @@ gst_rtp_base_depayload_class_init (GstRTPBaseDepayloadClass * klass)
       g_param_spec_int ("max-reorder", "Max Reorder",
           "Max seqnum reorder before assuming sender has restarted",
           0, G_MAXINT, DEFAULT_MAX_REORDER, G_PARAM_READWRITE));
+
+  /**
+   * GstRTPBaseDepayload::roi-ext-hdr-read
+   * @object: the #GstRTPBaseDepayload
+   * @buffer: the #GstBuffer to write #GstVideoRegionOfInterestMeta metas to
+   * @rtp_buffer: the #GstBuffer where the hdr read from
+   * @ext_id: the RTP header extension ID
+   *
+   * Allow application to provide a custom reader for roi-hdr-ext
+   **/
+  gst_rtp_base_depayload_signals[SIGNAL_ROI_EXT_HDR_READ] =
+      g_signal_new ("roi-ext-hdr-read", G_TYPE_FROM_CLASS (klass),
+      G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_generic,
+      G_TYPE_NONE, 3, G_TYPE_POINTER, G_TYPE_POINTER, G_TYPE_UINT);
 
   gstelement_class->change_state = gst_rtp_base_depayload_change_state;
 
@@ -730,6 +766,30 @@ gst_rtp_base_depayload_handle_event (GstRTPBaseDepayload * filter,
   return res;
 }
 
+/* FIXME: move somewhere else */
+static guint8
+_get_extmap_id_for_attribute (const GstStructure * s, const gchar * ext_name)
+{
+  guint i;
+  guint8 extmap_id = 0;
+  guint n_fields = gst_structure_n_fields (s);
+
+  for (i = 0; i < n_fields; i++) {
+    const gchar *field_name = gst_structure_nth_field_name (s, i);
+    if (g_str_has_prefix (field_name, "extmap-")) {
+      const gchar *str = gst_structure_get_string (s, field_name);
+      if (str && g_strcmp0 (str, ext_name) == 0) {
+        gint64 id = g_ascii_strtoll (field_name + 7, NULL, 10);
+        if (id > 0 && id < 15) {
+          extmap_id = id;
+          break;
+        }
+      }
+    }
+  }
+  return extmap_id;
+}
+
 static gboolean
 gst_rtp_base_depayload_handle_sink_event (GstPad * pad, GstObject * parent,
     GstEvent * event)
@@ -737,9 +797,24 @@ gst_rtp_base_depayload_handle_sink_event (GstPad * pad, GstObject * parent,
   gboolean res = FALSE;
   GstRTPBaseDepayload *filter;
   GstRTPBaseDepayloadClass *bclass;
+  GstRTPBaseDepayloadPrivate *priv;
 
   filter = GST_RTP_BASE_DEPAYLOAD (parent);
   bclass = GST_RTP_BASE_DEPAYLOAD_GET_CLASS (filter);
+  priv = filter->priv;
+
+  /* parse sink-caps and extract extmap-<id>=ROI_EXTMAP_STR */
+  if (GST_EVENT_TYPE (event) == GST_EVENT_CAPS) {
+    GstCaps *caps;
+    GstStructure *s;
+    guint8 ext_id;
+    gst_event_parse_caps (event, &caps);
+    s = gst_caps_get_structure (caps, 0);
+    ext_id = _get_extmap_id_for_attribute (s, ROI_EXTMAP_STR);
+    if (ext_id > 0)
+      priv->roi_ext_id = ext_id;
+  }
+
   if (bclass->handle_event)
     res = bclass->handle_event (filter, event);
   else
@@ -866,6 +941,17 @@ add_rtp_audio_level_meta (GstBuffer * out, GstBuffer * rtpbuf, guint8 id)
   gst_rtp_buffer_unmap (&rtp);
 }
 
+static void
+add_rtp_roi_meta (GstBuffer * out, GstBuffer * rtpbuf, guint8 id)
+{
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
+
+  if (!gst_rtp_buffer_map (rtpbuf, GST_MAP_READ, &rtp))
+    return;
+  gst_rtp_buffer_video_roi_meta_from_one_byte_ext (&rtp, out, id);
+  gst_rtp_buffer_unmap (&rtp);
+}
+
 static gboolean
 set_headers (GstBuffer ** buffer, guint idx, GstRTPBaseDepayload * depayload)
 {
@@ -904,6 +990,26 @@ set_headers (GstBuffer ** buffer, guint idx, GstRTPBaseDepayload * depayload)
   if (priv->audio_level_id > 0 && priv->input_buffer)
     add_rtp_audio_level_meta (*buffer, priv->input_buffer,
         priv->audio_level_id);
+
+  /* Add GstVideoRegionOfInterestMeta from roi-ext-hdr
+   * if signal is bound, use custom implementation otherwise default one */
+  if (priv->input_buffer && priv->roi_ext_id > 0) {
+    gboolean reader_roi_ext =
+        g_signal_handler_find (depayload, G_SIGNAL_MATCH_ID,
+        gst_rtp_base_depayload_signals[SIGNAL_ROI_EXT_HDR_READ],
+        0, NULL, NULL, NULL);
+    if (reader_roi_ext) {
+      GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
+      if (gst_rtp_buffer_map (priv->input_buffer, GST_MAP_READ, &rtp)) {
+        g_signal_emit (depayload,
+            gst_rtp_base_depayload_signals[SIGNAL_ROI_EXT_HDR_READ], 0,
+            *buffer, &rtp, priv->roi_ext_id);
+        gst_rtp_buffer_unmap (&rtp);
+      }
+    } else {
+      add_rtp_roi_meta (*buffer, priv->input_buffer, priv->roi_ext_id);
+    }
+  }
 
   return TRUE;
 }
@@ -1142,6 +1248,9 @@ gst_rtp_base_depayload_set_property (GObject * object, guint prop_id,
     case PROP_AUDIO_LEVEL_ID:
       priv->audio_level_id = g_value_get_uint (value);
       break;
+    case PROP_ROI_EXT_ID:
+      priv->roi_ext_id = g_value_get_uint (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -1172,6 +1281,9 @@ gst_rtp_base_depayload_get_property (GObject * object, guint prop_id,
       break;
     case PROP_AUDIO_LEVEL_ID:
       g_value_set_uint (value, priv->audio_level_id);
+      break;
+    case PROP_ROI_EXT_ID:
+      g_value_set_uint (value, priv->roi_ext_id);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);

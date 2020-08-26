@@ -26,9 +26,20 @@
 #include <gst/check/gstharness.h>
 #include <gst/rtp/rtp.h>
 #include <gst/rtp/gstrtpaudiolevelmeta.h>
+#include <gst/video/gstvideometa.h>
 
 #define DEFAULT_CLOCK_RATE (42)
 #define BUFFER_BEFORE_LIST (10)
+
+#define fail_unless_equals_roi_meta(expected_roi, actual_meta)                 \
+G_STMT_START {                                                                 \
+  fail_unless ((actual_meta), "'"#actual_meta"' is nil");                      \
+  fail_unless_equals_int ((actual_meta)->roi_type, (expected_roi).type);       \
+  fail_unless_equals_int ((actual_meta)->x, (expected_roi).x);                 \
+  fail_unless_equals_int ((actual_meta)->y, (expected_roi).y);                 \
+  fail_unless_equals_int ((actual_meta)->w, (expected_roi).w);                 \
+  fail_unless_equals_int ((actual_meta)->h, (expected_roi).h);                 \
+} G_STMT_END;
 
 /* GstRtpDummyPay */
 
@@ -2086,6 +2097,160 @@ GST_START_TEST (rtp_base_payload_property_twcc_ext_id_test)
 
 GST_END_TEST;
 
+typedef struct
+{
+  guint type;
+  guint x;
+  guint y;
+  guint w;
+  guint h;
+} RoI;
+
+#define ROI_EXTMAP_STR "TBD:draft-ford-avtcore-roi-extension-00"
+#define ROI_EXT_ID 10
+
+static void
+_write_roi_hdr_ext (gpointer * user_data, GstBuffer * input_meta_buffer,
+    GstRTPBuffer * rtp_buffer, guint ext_id)
+{
+  gboolean *called;
+
+  fail_unless (input_meta_buffer);
+  fail_unless (rtp_buffer);
+  fail_unless (user_data);
+  fail_unless_equals_int (ext_id, ROI_EXT_ID);
+
+  called = (gboolean *) user_data;
+  *called = TRUE;
+
+  /* Reference implementation, write RoI ext hdr for
+   * ANY RegionOfInterestMeta with a fixed ext-hdr-id */
+  gst_rtp_buffer_video_roi_meta_to_one_byte_ext ((GstRTPBuffer *) rtp_buffer,
+      input_meta_buffer, ROI_EXT_ID);
+}
+
+GST_START_TEST (rtp_base_payload_property_roi_ext_id_test)
+{
+  GstHarness *h;
+  GstRtpDummyPay *pay;
+  GstBuffer *buf;
+  GstBuffer *tmp_buf;
+  GstVideoRegionOfInterestMeta *meta;
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
+  GstCaps *caps, *expected_caps;
+  gboolean meta_present;
+  guint8 ext_id = 10;
+  gint id = 0xAF;
+  RoI roi = { id, 50, 50, 500, 500 };
+  guint i;
+  gboolean custom_writer_called = FALSE;
+  gulong signal_handler_id;
+
+  pay = rtp_dummy_pay_new ();
+  g_object_set (pay, "roi-ext-id", ROI_EXT_ID, NULL);
+  signal_handler_id = g_signal_connect_swapped (pay,
+      "roi-ext-hdr-write", G_CALLBACK (_write_roi_hdr_ext),
+      &custom_writer_called);
+
+  h = gst_harness_new_with_element (GST_ELEMENT_CAST (pay), "sink", "src");
+  gst_harness_set_src_caps_str (h, "application/x-rtp");
+
+  /* Input buffer has no RoI meta, payloader should not add any extensionheaders */
+  /* custom writer should be called only if there is RegionOfInterestMeta */
+  buf = gst_harness_push_and_pull (h, gst_buffer_new ());
+  gst_rtp_buffer_map (buf, GST_MAP_READWRITE, &rtp);
+  for (i = 1; i < 15; i++) {
+    meta_present =
+        gst_rtp_buffer_video_roi_meta_from_one_byte_ext (&rtp, buf, i);
+    meta = gst_buffer_get_video_region_of_interest_meta (buf);
+    fail_if (meta_present);
+    fail_unless (meta == NULL);
+  }
+  gst_rtp_buffer_unmap (&rtp);
+  gst_buffer_unref (buf);
+
+  fail_if (custom_writer_called);
+
+  /* Input buffer has RoI meta, payloader should add extensionheaders for the
+   * right ID but using a custom writer as we have connected the signal */
+  buf = gst_buffer_new ();
+  meta = gst_buffer_add_video_region_of_interest_meta_id (buf,
+      id, roi.x, roi.y, roi.w, roi.h);
+  fail_unless_equals_roi_meta (roi, meta);
+  fail_unless_equals_roi_meta (roi,
+      gst_buffer_get_video_region_of_interest_meta (buf));
+  tmp_buf = gst_buffer_new ();
+  buf = gst_harness_push_and_pull (h, buf);
+  gst_rtp_buffer_map (buf, GST_MAP_READWRITE, &rtp);
+  meta_present =
+      gst_rtp_buffer_video_roi_meta_from_one_byte_ext (&rtp, tmp_buf, ext_id);
+  meta = gst_buffer_get_video_region_of_interest_meta (tmp_buf);
+  fail_unless (meta);
+  fail_unless_equals_roi_meta (roi, meta);
+  gst_rtp_buffer_unmap (&rtp);
+  gst_buffer_unref (tmp_buf);
+  gst_buffer_unref (buf);
+
+  fail_unless (custom_writer_called);
+
+  /* Input buffer has RoI meta, payloader should add extensionheaders for the
+   * right ID but using the default writer as roi-ext-id property is set
+   * and we have disconnected the signal */
+  custom_writer_called = FALSE;
+  g_signal_handler_disconnect (pay, signal_handler_id);
+
+  buf = gst_buffer_new ();
+  meta = gst_buffer_add_video_region_of_interest_meta_id (buf,
+      id, roi.x, roi.y, roi.w, roi.h);
+  fail_unless_equals_roi_meta (roi, meta);
+  fail_unless_equals_roi_meta (roi,
+      gst_buffer_get_video_region_of_interest_meta (buf));
+  tmp_buf = gst_buffer_new ();
+  buf = gst_harness_push_and_pull (h, buf);
+  gst_rtp_buffer_map (buf, GST_MAP_READWRITE, &rtp);
+  meta_present =
+      gst_rtp_buffer_video_roi_meta_from_one_byte_ext (&rtp, tmp_buf, ext_id);
+  meta = gst_buffer_get_video_region_of_interest_meta (tmp_buf);
+  fail_unless (meta);
+  fail_unless_equals_roi_meta (roi, meta);
+  gst_rtp_buffer_unmap (&rtp);
+  gst_buffer_unref (tmp_buf);
+  gst_buffer_unref (buf);
+
+  fail_if (custom_writer_called);
+
+  /* Payloader sets roi-ext-id to its default, all RoI meta should be ignored */
+  g_object_set (pay, "roi-ext-id", 0, NULL);
+  buf = gst_buffer_new ();
+  meta = gst_buffer_add_video_region_of_interest_meta_id (buf,
+      id, roi.x, roi.y, roi.w, roi.h);
+  fail_unless_equals_roi_meta (roi, meta);
+  tmp_buf = gst_buffer_new ();
+  buf = gst_harness_push_and_pull (h, buf);
+  gst_rtp_buffer_map (buf, GST_MAP_READWRITE, &rtp);
+  for (i = 1; i < 15; i++) {
+    meta_present =
+        gst_rtp_buffer_video_roi_meta_from_one_byte_ext (&rtp, tmp_buf, i);
+    meta = gst_buffer_get_video_region_of_interest_meta (tmp_buf);
+    fail_if (meta);
+  }
+  gst_rtp_buffer_unmap (&rtp);
+  gst_buffer_unref (buf);
+  gst_buffer_unref (tmp_buf);
+
+  /* Verify the presence of the roi-ext-id in caps */
+  caps = gst_pad_get_current_caps (GST_PAD_PEER (h->sinkpad));
+  expected_caps = gst_caps_from_string ("application/x-rtp, "
+      "extmap-10=" ROI_EXTMAP_STR "");
+  fail_unless (gst_caps_is_subset (caps, expected_caps));
+  gst_caps_unref (caps);
+  gst_caps_unref (expected_caps);
+
+  g_object_unref (pay);
+  gst_harness_teardown (h);
+}
+
+GST_END_TEST;
 
 static Suite *
 rtp_basepayloading_suite (void)
@@ -2122,12 +2287,14 @@ rtp_basepayloading_suite (void)
   tcase_add_test (tc_chain, rtp_base_payload_property_stats_test);
   tcase_add_test (tc_chain, rtp_base_payload_property_source_info_test);
   tcase_add_test (tc_chain, rtp_base_payload_property_twcc_ext_id_test);
+  tcase_add_test (tc_chain, rtp_base_payload_property_roi_ext_id_test);
   tcase_add_test (tc_chain, rtp_base_payload_property_audio_level_id_test);
 
   tcase_add_test (tc_chain, rtp_base_payload_framerate_attribute);
   tcase_add_test (tc_chain, rtp_base_payload_max_framerate_attribute);
 
   tcase_add_test (tc_chain, rtp_base_payload_segment_time);
+
 
   return s;
 }
