@@ -1756,7 +1756,7 @@ gst_rtp_buffer_video_roi_meta_to_one_byte_ext (GstRTPBuffer * rtp,
 }
 
 /**
- * gst_buffer_video_roi_meta_from_one_byte_ext:
+ * gst_rtp_buffer_video_roi_meta_from_one_byte_ext:
  * @rtp: a #GstRTPBuffer to read a ROI header extension to.
  * @buffer: a #GstBuffer to write #GstVideoRegionOfInterestMeta to.
  * @id: The ID of the header extension to be read (between 1 and 14).
