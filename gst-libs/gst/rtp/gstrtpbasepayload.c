@@ -1220,12 +1220,6 @@ gst_rtp_base_payload_negotiate (GstRTPBasePayload * payload)
         "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01");
   }
 
-  if (payload->priv->roi_ext_id > 0) {
-    _set_caps_from_ext_id (srccaps,
-        payload->priv->roi_ext_id,
-        "TBD");
-  }
-
   res = gst_pad_set_caps (GST_RTP_BASE_PAYLOAD_SRCPAD (payload), srccaps);
   gst_caps_unref (srccaps);
   gst_caps_unref (templ);

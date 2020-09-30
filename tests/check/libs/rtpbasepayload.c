@@ -2106,8 +2106,6 @@ typedef struct
   guint h;
 } RoI;
 
-#define ROI_EXTMAP_STR "TBD"
-
 GST_START_TEST (rtp_base_payload_property_roi_ext_id_test)
 {
   GstHarness *h;
@@ -2116,7 +2114,6 @@ GST_START_TEST (rtp_base_payload_property_roi_ext_id_test)
   GstBuffer *tmp_buf;
   GstVideoRegionOfInterestMeta *meta;
   GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
-  GstCaps *caps, *expected_caps;
   gboolean meta_present;
   guint8 ext_id = 10;
   gint id = 0xAF;
@@ -2180,14 +2177,6 @@ GST_START_TEST (rtp_base_payload_property_roi_ext_id_test)
   gst_rtp_buffer_unmap (&rtp);
   gst_buffer_unref (buf);
   gst_buffer_unref (tmp_buf);
-
-  /* Verify the presence of the roi-ext-id in caps */
-  caps = gst_pad_get_current_caps (GST_PAD_PEER (h->sinkpad));
-  expected_caps = gst_caps_from_string ("application/x-rtp, "
-      "extmap-10=" ROI_EXTMAP_STR "");
-  fail_unless (gst_caps_is_subset (caps, expected_caps));
-  gst_caps_unref (caps);
-  gst_caps_unref (expected_caps);
 
   g_object_unref (pay);
   gst_harness_teardown (h);
