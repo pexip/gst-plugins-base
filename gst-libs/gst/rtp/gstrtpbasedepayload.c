@@ -216,7 +216,7 @@ gst_rtp_base_depayload_class_init (GstRTPBaseDepayloadClass * klass)
           DEFAULT_SOURCE_INFO, G_PARAM_READWRITE));
 
   /**
-   * GstRTPBasePayload:roi-ext-id:
+   * GstRTPBaseDepayload:roi-ext-id:
    *
    * Specift the ID to use, reading RoI meta using extensionheaders,
    * and writing the information as #GstVideoRegionOfInterestMeta on the output
@@ -231,7 +231,7 @@ gst_rtp_base_depayload_class_init (GstRTPBaseDepayloadClass * klass)
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   /**
-   * GstRTPBasePayload:audio-level-id:
+   * GstRTPBaseDepayload:audio-level-id:
    *
    * Specify the ID to use, reading Audio Level Indication using
    * extensionheaders as specified by RFC 6464, and writing the information
