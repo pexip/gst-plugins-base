@@ -2110,24 +2110,25 @@ typedef struct
 
 static void
 _write_roi_hdr_ext (gpointer * user_data, GstBuffer * input_meta_buffer,
-    GstBuffer * rtp_buffer)
+    GstBuffer * rtp_buffer, gint ext_id)
 {
-  gboolean * called;
+  gboolean *called;
 
-  g_assert (input_meta_buffer);
-  g_assert ((GstRTPBuffer *) rtp_buffer);
-  g_assert (user_data);
+  fail_unless (input_meta_buffer);
+  fail_unless ((GstRTPBuffer *) rtp_buffer);
+  fail_unless (user_data);
+  fail_unless_equals_int (ext_id, ROI_EXT_ID);
 
   called = (gboolean *) user_data;
   *called = TRUE;
 
   /* Reference implementation, write RoI ext hdr for
    * ANY RegionOfInterestMeta with a fixed ext-hdr-id */
-  gst_rtp_buffer_video_roi_meta_to_one_byte_ext ((GstRTPBuffer *)rtp_buffer,
+  gst_rtp_buffer_video_roi_meta_to_one_byte_ext ((GstRTPBuffer *) rtp_buffer,
       input_meta_buffer, ROI_EXT_ID);
 }
 
-GST_START_TEST (rtp_base_payload_signal_roi_ext_hdr_writer)
+GST_START_TEST (rtp_base_payload_property_roi_ext_id_test)
 {
   GstHarness *h;
   GstRtpDummyPay *pay;
@@ -2144,8 +2145,10 @@ GST_START_TEST (rtp_base_payload_signal_roi_ext_hdr_writer)
   gulong signal_handler_id;
 
   pay = rtp_dummy_pay_new ();
+  g_object_set (pay, "roi-ext-id", ROI_EXT_ID, NULL);
   signal_handler_id = g_signal_connect_swapped (pay,
-      "roi-ext-hdr-write", G_CALLBACK (_write_roi_hdr_ext), &custom_writer_called);
+      "roi-ext-hdr-write", G_CALLBACK (_write_roi_hdr_ext),
+      &custom_writer_called);
 
   h = gst_harness_new_with_element (GST_ELEMENT_CAST (pay), "sink", "src");
   gst_harness_set_src_caps_str (h, "application/x-rtp");
@@ -2167,7 +2170,7 @@ GST_START_TEST (rtp_base_payload_signal_roi_ext_hdr_writer)
   fail_if (custom_writer_called);
 
   /* Input buffer has RoI meta, payloader should add extensionheaders for the
-   * right ID but using a custom writer as roi-ext-id property is unset */
+   * right ID but using a custom writer as we have connected the signal */
   buf = gst_buffer_new ();
   meta = gst_buffer_add_video_region_of_interest_meta_id (buf,
       id, roi.x, roi.y, roi.w, roi.h);
@@ -2189,9 +2192,10 @@ GST_START_TEST (rtp_base_payload_signal_roi_ext_hdr_writer)
   fail_unless (custom_writer_called);
 
   /* Input buffer has RoI meta, payloader should add extensionheaders for the
-   * right ID but using the default writer as roi-ext-id property is set */
+   * right ID but using the default writer as roi-ext-id property is set
+   * and we have disconnected the signal */
   custom_writer_called = FALSE;
-  g_object_set (pay, "roi-ext-id", ROI_EXT_ID, NULL);
+  g_signal_handler_disconnect (pay, signal_handler_id);
 
   buf = gst_buffer_new ();
   meta = gst_buffer_add_video_region_of_interest_meta_id (buf,
@@ -2215,7 +2219,6 @@ GST_START_TEST (rtp_base_payload_signal_roi_ext_hdr_writer)
 
   /* Payloader sets roi-ext-id to its default, all RoI meta should be ignored */
   g_object_set (pay, "roi-ext-id", 0, NULL);
-  g_signal_handler_disconnect (pay, signal_handler_id);
   buf = gst_buffer_new ();
   meta = gst_buffer_add_video_region_of_interest_meta_id (buf,
       id, roi.x, roi.y, roi.w, roi.h);
@@ -2274,6 +2277,7 @@ rtp_basepayloading_suite (void)
   tcase_add_test (tc_chain, rtp_base_payload_property_stats_test);
   tcase_add_test (tc_chain, rtp_base_payload_property_source_info_test);
   tcase_add_test (tc_chain, rtp_base_payload_property_twcc_ext_id_test);
+  tcase_add_test (tc_chain, rtp_base_payload_property_roi_ext_id_test);
   tcase_add_test (tc_chain, rtp_base_payload_property_audio_level_id_test);
 
   tcase_add_test (tc_chain, rtp_base_payload_framerate_attribute);
@@ -2281,7 +2285,6 @@ rtp_basepayloading_suite (void)
 
   tcase_add_test (tc_chain, rtp_base_payload_segment_time);
 
-  tcase_add_test (tc_chain, rtp_base_payload_signal_roi_ext_hdr_writer);
 
   return s;
 }

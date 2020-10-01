@@ -107,6 +107,9 @@ struct _GstRTPBaseDepayloadClass
 
   GstBuffer * (*process_rtp_packet) (GstRTPBaseDepayload *base, GstRTPBuffer * rtp_buffer);
 
+  /* signals */
+  void (*on_roi_hdr_ext_read) (GstRTPBaseDepayload *payload, GstBuffer * input_meta_buffer, GstBuffer * rtp_buffer, gint ext_id);
+
   /*< private >*/
   gpointer _gst_reserved[GST_PADDING - 1];
 };

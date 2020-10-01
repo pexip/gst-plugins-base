@@ -73,9 +73,11 @@ struct _GstRTPBaseDepayloadPrivate
 /* Filter signals and args */
 enum
 {
-  /* FILL ME */
+  SIGNAL_ROI_EXT_HDR_READ,
   LAST_SIGNAL
 };
+
+static guint gst_rtp_base_depayload_signals[LAST_SIGNAL] = { 0 };
 
 #define DEFAULT_SOURCE_INFO FALSE
 #define DEFAULT_AUDIO_LEVEL_ID 0
@@ -261,6 +263,21 @@ gst_rtp_base_depayload_class_init (GstRTPBaseDepayloadClass * klass)
       g_param_spec_int ("max-reorder", "Max Reorder",
           "Max seqnum reorder before assuming sender has restarted",
           0, G_MAXINT, DEFAULT_MAX_REORDER, G_PARAM_READWRITE));
+
+  /**
+   * GstRTPBaseDepayload::roi-ext-hdr-read
+   * @object: the #GstRTPBaseDepayload
+   * @buffer: the #GstBuffer to write #GstVideoRegionOfInterestMeta metas to
+   * @rtp_buffer: the #GstBuffer where the hdr read from
+   * @ext_id: the RTP header extension ID
+   *
+   * Allow application to provide a custom reader for roi-hdr-ext
+   **/
+  gst_rtp_base_depayload_signals[SIGNAL_ROI_EXT_HDR_READ] =
+      g_signal_new ("roi-ext-hdr-read", G_TYPE_FROM_CLASS (klass),
+      G_SIGNAL_RUN_LAST, G_STRUCT_OFFSET (GstRTPBaseDepayloadClass,
+          on_roi_hdr_ext_read), NULL, NULL, g_cclosure_marshal_generic,
+      G_TYPE_NONE, 3, G_TYPE_POINTER, G_TYPE_POINTER, G_TYPE_INT);
 
   gstelement_class->change_state = gst_rtp_base_depayload_change_state;
 
@@ -934,9 +951,25 @@ set_headers (GstBuffer ** buffer, guint idx, GstRTPBaseDepayload * depayload)
     add_rtp_audio_level_meta (*buffer, priv->input_buffer,
         priv->audio_level_id);
 
-  if (priv->roi_ext_id > 0 && priv->input_buffer)
-    add_rtp_roi_meta (*buffer, priv->input_buffer,
-        priv->roi_ext_id);
+  /* Add GstVideoRegionOfInterestMeta from roi-ext-hdr
+   * if signal is bound, use custom implementation otherwise default one */
+  if (priv->input_buffer && priv->roi_ext_id > 0) {
+    gboolean reader_roi_ext =
+        g_signal_handler_find (depayload, G_SIGNAL_MATCH_ID,
+        gst_rtp_base_depayload_signals[SIGNAL_ROI_EXT_HDR_READ],
+        0, NULL, NULL, NULL);
+    if (reader_roi_ext) {
+      GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
+      if (gst_rtp_buffer_map (priv->input_buffer, GST_MAP_READ, &rtp)) {
+        g_signal_emit (depayload,
+            gst_rtp_base_depayload_signals[SIGNAL_ROI_EXT_HDR_READ],
+            3, *buffer, &rtp, priv->roi_ext_id);
+        gst_rtp_buffer_unmap (&rtp);
+      }
+    } else {
+      add_rtp_roi_meta (*buffer, priv->input_buffer, priv->roi_ext_id);
+    }
+  }
 
   return TRUE;
 }
