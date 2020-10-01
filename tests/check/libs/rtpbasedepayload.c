@@ -1535,6 +1535,28 @@ typedef struct
   guint h;
 } RoI;
 
+#define ROI_EXT_ID 10
+
+static void
+_read_roi_hdr_ext (gpointer * user_data, GstBuffer * input_meta_buffer,
+    GstBuffer * rtp_buffer, gint ext_id)
+{
+  gboolean *called;
+
+  fail_unless (input_meta_buffer);
+  fail_unless ((GstRTPBuffer *) rtp_buffer);
+  fail_unless (user_data);
+  fail_unless_equals_int (ext_id, ROI_EXT_ID);
+
+  called = (gboolean *) user_data;
+  *called = TRUE;
+
+  /* Reference implementation, read RoI ext hdr for
+   * to generic RegionOfInterestMeta */
+  gst_rtp_buffer_video_roi_meta_from_one_byte_ext ((GstRTPBuffer *) rtp_buffer,
+      input_meta_buffer, ext_id);
+}
+
 /* basedepayloader has a property roi-ext-id which will make it try
  * to extract RoI meta from the extensionheader, and add that
  * as GstVideoRegionOfInterestMeta on the output buffers.
@@ -1548,20 +1570,25 @@ GST_START_TEST (rtp_base_depayload_roi_ext_id_test)
   GstBuffer *buffer;
   GstBuffer *buffer_with_meta;
   GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
-  guint8 ext_id = 10;
   guint8 id = 5;
   RoI roi = { id, 50, 50, 500, 500 };
   guint seq = 0;
   guint ssrc = 0xDEADBEEF;
   gint i;
+  gboolean custom_reader_called = FALSE;
+  gulong signal_handler_id;
 
   depay = rtp_dummy_depay_new ();
   h = gst_harness_new_with_element (GST_ELEMENT_CAST (depay), "sink", "src");
   gst_harness_set_src_caps_str (h, "application/x-rtp");
 
-  g_object_set (depay, "roi-ext-id", ext_id, NULL);
+  g_object_set (depay, "roi-ext-id", ROI_EXT_ID, NULL);
+  signal_handler_id = g_signal_connect_swapped (depay,
+      "roi-ext-hdr-read", G_CALLBACK (_read_roi_hdr_ext),
+      &custom_reader_called);
 
-  /* Input has no extensionheader, should not add meta */
+  /* Input has no extensionheader, should not add meta but
+   * since ext-id is set the custom reader is called */
   buffer = gst_rtp_buffer_new_allocate (0, 0, 0);
   rtp_buffer_set (buffer, "seq", seq++, "ssrc", ssrc, NULL);
   buffer = gst_harness_push_and_pull (h, buffer);
@@ -1569,8 +1596,11 @@ GST_START_TEST (rtp_base_depayload_roi_ext_id_test)
   fail_if (out_meta);
   gst_buffer_unref (buffer);
 
+  fail_unless (custom_reader_called);
+
   /* Input buffer has extensionheader, depayloader should add meta for the
-     right ID */
+     right ID custom reader as we have connected to the signal */
+  custom_reader_called = FALSE;
   buffer_with_meta = gst_buffer_new ();
   in_meta = gst_buffer_add_video_region_of_interest_meta_id (buffer_with_meta,
       id, roi.x, roi.y, roi.w, roi.h);
@@ -1588,7 +1618,7 @@ GST_START_TEST (rtp_base_depayload_roi_ext_id_test)
     buffer = gst_harness_push_and_pull (h, buffer);
     out_meta = gst_buffer_get_video_region_of_interest_meta (buffer);
 
-    if (i == ext_id) {
+    if (i == ROI_EXT_ID) {
       fail_unless (out_meta);
       fail_unless_equals_roi_meta (roi, out_meta);
     } else {
@@ -1596,6 +1626,40 @@ GST_START_TEST (rtp_base_depayload_roi_ext_id_test)
     }
     gst_buffer_unref (buffer);
   }
+  fail_unless (custom_reader_called);
+
+  gst_buffer_unref (buffer_with_meta);
+
+  /* Input buffer has extensionheader, depayloader should add meta for the
+     right ID using default reader as we have disconnected the signal */
+  custom_reader_called = FALSE;
+  g_signal_handler_disconnect (depay, signal_handler_id);
+  buffer_with_meta = gst_buffer_new ();
+  in_meta = gst_buffer_add_video_region_of_interest_meta_id (buffer_with_meta,
+      id, roi.x, roi.y, roi.w, roi.h);
+  fail_unless_equals_roi_meta (roi, in_meta);
+  fail_unless_equals_roi_meta (roi,
+      gst_buffer_get_video_region_of_interest_meta (buffer_with_meta));
+
+  for (i = 1; i <= 14; i++) {
+    buffer = gst_rtp_buffer_new_allocate (0, 0, 0);
+    rtp_buffer_set (buffer, "seq", seq++, "ssrc", ssrc, NULL);
+    gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
+    fail_unless (gst_rtp_buffer_video_roi_meta_to_one_byte_ext (&rtp,
+            buffer_with_meta, i));
+    gst_rtp_buffer_unmap (&rtp);
+    buffer = gst_harness_push_and_pull (h, buffer);
+    out_meta = gst_buffer_get_video_region_of_interest_meta (buffer);
+
+    if (i == ROI_EXT_ID) {
+      fail_unless (out_meta);
+      fail_unless_equals_roi_meta (roi, out_meta);
+    } else {
+      fail_unless (out_meta == NULL);
+    }
+    gst_buffer_unref (buffer);
+  }
+  fail_if (custom_reader_called);
 
   /* Property is disabled, depayloader should not add meta */
   g_object_set (depay, "roi-ext-id", 0, NULL);
@@ -1603,12 +1667,14 @@ GST_START_TEST (rtp_base_depayload_roi_ext_id_test)
   rtp_buffer_set (buffer, "seq", seq++, "ssrc", ssrc, NULL);
   gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
   fail_unless (gst_rtp_buffer_video_roi_meta_to_one_byte_ext (&rtp,
-          buffer_with_meta, ext_id));
+          buffer_with_meta, ROI_EXT_ID));
   gst_rtp_buffer_unmap (&rtp);
   buffer = gst_harness_push_and_pull (h, buffer);
   out_meta = gst_buffer_get_video_region_of_interest_meta (buffer);
   fail_unless (out_meta == NULL);
   gst_buffer_unref (buffer);
+
+  fail_if (custom_reader_called);
 
   gst_buffer_unref (buffer_with_meta);
   g_object_unref (depay);

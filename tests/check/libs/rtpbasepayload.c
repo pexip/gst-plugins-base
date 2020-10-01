@@ -2107,6 +2107,27 @@ typedef struct
 } RoI;
 
 #define ROI_EXTMAP_STR "TBD"
+#define ROI_EXT_ID 10
+
+static void
+_write_roi_hdr_ext (gpointer * user_data, GstBuffer * input_meta_buffer,
+    GstBuffer * rtp_buffer, gint ext_id)
+{
+  gboolean *called;
+
+  fail_unless (input_meta_buffer);
+  fail_unless ((GstRTPBuffer *) rtp_buffer);
+  fail_unless (user_data);
+  fail_unless_equals_int (ext_id, ROI_EXT_ID);
+
+  called = (gboolean *) user_data;
+  *called = TRUE;
+
+  /* Reference implementation, write RoI ext hdr for
+   * ANY RegionOfInterestMeta with a fixed ext-hdr-id */
+  gst_rtp_buffer_video_roi_meta_to_one_byte_ext ((GstRTPBuffer *) rtp_buffer,
+      input_meta_buffer, ROI_EXT_ID);
+}
 
 GST_START_TEST (rtp_base_payload_property_roi_ext_id_test)
 {
@@ -2122,14 +2143,20 @@ GST_START_TEST (rtp_base_payload_property_roi_ext_id_test)
   gint id = 0xAF;
   RoI roi = { id, 50, 50, 500, 500 };
   guint i;
+  gboolean custom_writer_called = FALSE;
+  gulong signal_handler_id;
 
   pay = rtp_dummy_pay_new ();
-  g_object_set (pay, "roi-ext-id", ext_id, NULL);
+  g_object_set (pay, "roi-ext-id", ROI_EXT_ID, NULL);
+  signal_handler_id = g_signal_connect_swapped (pay,
+      "roi-ext-hdr-write", G_CALLBACK (_write_roi_hdr_ext),
+      &custom_writer_called);
 
   h = gst_harness_new_with_element (GST_ELEMENT_CAST (pay), "sink", "src");
   gst_harness_set_src_caps_str (h, "application/x-rtp");
 
   /* Input buffer has no RoI meta, payloader should not add any extensionheaders */
+  /* custom writer should be called only if there is RegionOfInterestMeta */
   buf = gst_harness_push_and_pull (h, gst_buffer_new ());
   gst_rtp_buffer_map (buf, GST_MAP_READWRITE, &rtp);
   for (i = 1; i < 15; i++) {
@@ -2142,8 +2169,10 @@ GST_START_TEST (rtp_base_payload_property_roi_ext_id_test)
   gst_rtp_buffer_unmap (&rtp);
   gst_buffer_unref (buf);
 
+  fail_if (custom_writer_called);
+
   /* Input buffer has RoI meta, payloader should add extensionheaders for the
-   * right ID */
+   * right ID but using a custom writer as we have connected the signal */
   buf = gst_buffer_new ();
   meta = gst_buffer_add_video_region_of_interest_meta_id (buf,
       id, roi.x, roi.y, roi.w, roi.h);
@@ -2161,6 +2190,34 @@ GST_START_TEST (rtp_base_payload_property_roi_ext_id_test)
   gst_rtp_buffer_unmap (&rtp);
   gst_buffer_unref (tmp_buf);
   gst_buffer_unref (buf);
+
+  fail_unless (custom_writer_called);
+
+  /* Input buffer has RoI meta, payloader should add extensionheaders for the
+   * right ID but using the default writer as roi-ext-id property is set
+   * and we have disconnected the signal */
+  custom_writer_called = FALSE;
+  g_signal_handler_disconnect (pay, signal_handler_id);
+
+  buf = gst_buffer_new ();
+  meta = gst_buffer_add_video_region_of_interest_meta_id (buf,
+      id, roi.x, roi.y, roi.w, roi.h);
+  fail_unless_equals_roi_meta (roi, meta);
+  fail_unless_equals_roi_meta (roi,
+      gst_buffer_get_video_region_of_interest_meta (buf));
+  tmp_buf = gst_buffer_new ();
+  buf = gst_harness_push_and_pull (h, buf);
+  gst_rtp_buffer_map (buf, GST_MAP_READWRITE, &rtp);
+  meta_present =
+      gst_rtp_buffer_video_roi_meta_from_one_byte_ext (&rtp, tmp_buf, ext_id);
+  meta = gst_buffer_get_video_region_of_interest_meta (tmp_buf);
+  fail_unless (meta);
+  fail_unless_equals_roi_meta (roi, meta);
+  gst_rtp_buffer_unmap (&rtp);
+  gst_buffer_unref (tmp_buf);
+  gst_buffer_unref (buf);
+
+  fail_if (custom_writer_called);
 
   /* Payloader sets roi-ext-id to its default, all RoI meta should be ignored */
   g_object_set (pay, "roi-ext-id", 0, NULL);
@@ -2237,6 +2294,7 @@ rtp_basepayloading_suite (void)
   tcase_add_test (tc_chain, rtp_base_payload_max_framerate_attribute);
 
   tcase_add_test (tc_chain, rtp_base_payload_segment_time);
+
 
   return s;
 }
