@@ -27,6 +27,7 @@
 #include <string.h>
 
 #include <gst/rtp/gstrtpbuffer.h>
+#include <gst/video/gstvideometa.h>
 
 #include "gstrtpbasepayload.h"
 #include "gstrtpmeta.h"
@@ -75,9 +76,11 @@ struct _GstRTPBasePayloadPrivate
 /* RTPBasePayload signals and args */
 enum
 {
-  /* FILL ME */
+  SIGNAL_ROI_EXT_HDR_WRITE,
   LAST_SIGNAL
 };
+
+static guint gst_rtp_base_depayload_signals[LAST_SIGNAL] = { 0 };
 
 /* FIXME 0.11, a better default is the Ethernet MTU of
  * 1500 - sizeof(headers) as pointed out by marcelm in IRC:
@@ -424,6 +427,20 @@ gst_rtp_base_payload_class_init (GstRTPBasePayloadClass * klass)
           0, 14, DEFAULT_AUDIO_LEVEL_ID,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  /**
+   * GstRTPBasePayload::roi-ext-hdr-write
+   * @object: the #GstRTPBasePayload
+   * @rtp_buffer: the #GstBuffer where the hdr is writen to
+   * @buffer: the #GstBuffer containing metas only
+   *
+   * Allow application to provide a custom writer for roi-hdr-ext
+   **/
+   gst_rtp_base_depayload_signals[SIGNAL_ROI_EXT_HDR_WRITE] =
+      g_signal_new ("roi-ext-hdr-write", G_TYPE_FROM_CLASS (klass),
+      G_SIGNAL_RUN_LAST, G_STRUCT_OFFSET (GstRTPBasePayloadClass, on_roi_hdr_ext_write),
+      NULL, NULL, g_cclosure_marshal_generic,
+      G_TYPE_NONE, 2, G_TYPE_POINTER, G_TYPE_POINTER);
+
   gstelement_class->change_state = gst_rtp_base_payload_change_state;
 
   klass->get_caps = gst_rtp_base_payload_getcaps_default;
@@ -763,7 +780,12 @@ gst_rtp_base_payload_chain (GstPad * pad, GstObject * parent,
   if (!priv->negotiated)
     goto not_negotiated;
 
-  if (priv->source_info || priv->audio_level_id > 0 || priv->roi_ext_id > 0) {
+  gboolean write_roi_ext = g_signal_handler_find (parent, G_SIGNAL_MATCH_ID,
+        gst_rtp_base_depayload_signals[SIGNAL_ROI_EXT_HDR_WRITE],
+        NULL, NULL, NULL, NULL);
+
+  if (priv->source_info || priv->audio_level_id > 0
+      || priv->roi_ext_id > 0 || write_roi_ext) {
     /* Save a copy of meta (instead of taking an extra reference before
      * handle_buffer) to make the meta available when allocating a output
      * buffer. */
@@ -1610,24 +1632,38 @@ gst_rtp_base_payload_allocate_output_buffer (GstRTPBasePayload * payload,
   if (buffer == NULL)
     buffer = gst_rtp_buffer_new_allocate (payload_len, pad_len, csrc_count);
 
-  if (priv->audio_level_id > 0 && priv->input_meta_buffer != NULL) {
-    GstRTPAudioLevelMeta *audio_meta =
-        gst_buffer_get_rtp_audio_level_meta (priv->input_meta_buffer);
-    if (audio_meta != NULL) {
-      GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
+  if (priv->input_meta_buffer) {
+    const GstMetaInfo *roi_info = GST_VIDEO_REGION_OF_INTEREST_META_INFO;
+    GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
+
+    /* Use default implementation iff roi-ext-id is set as property,
+     * otherwise rely on custom application's implementation */
+    if (priv->roi_ext_id > 0) {
       gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
-      gst_rtp_audio_level_meta_add_one_byte_ext (audio_meta, &rtp,
-          priv->audio_level_id);
+      gst_rtp_buffer_video_roi_meta_to_one_byte_ext (&rtp,
+        priv->input_meta_buffer, priv->roi_ext_id);
+      gst_rtp_buffer_unmap (&rtp);
+    } else if (gst_buffer_get_n_meta (priv->input_meta_buffer,
+          roi_info->api) > 0) {
+      gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
+      g_signal_emit (payload,
+          gst_rtp_base_depayload_signals[SIGNAL_ROI_EXT_HDR_WRITE],
+          2, priv->input_meta_buffer, &rtp);
       gst_rtp_buffer_unmap (&rtp);
     }
-  }
 
-  if (priv->roi_ext_id > 0 && priv->input_meta_buffer != NULL) {
-    GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
-    gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
-    gst_rtp_buffer_video_roi_meta_to_one_byte_ext (&rtp,
-        priv->input_meta_buffer, priv->roi_ext_id);
-    gst_rtp_buffer_unmap (&rtp);
+    /* support AudioLevel meta in old manner */
+    if (priv->audio_level_id > 0) {
+      gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
+      GstRTPAudioLevelMeta *audio_meta =
+          gst_buffer_get_rtp_audio_level_meta (priv->input_meta_buffer);
+      if (audio_meta != NULL) {
+        gst_rtp_audio_level_meta_add_one_byte_ext (audio_meta, &rtp,
+            priv->audio_level_id);
+        gst_rtp_buffer_unmap (&rtp);
+      }
+      gst_rtp_buffer_unmap (&rtp);
+    }
   }
 
   return buffer;

@@ -142,6 +142,9 @@ struct _GstRTPBasePayloadClass
   gboolean      (*src_event)            (GstRTPBasePayload *payload, GstEvent * event);
   gboolean      (*query)                (GstRTPBasePayload *payload, GstPad *pad, GstQuery * query);
 
+  /* signals */
+  void (*on_roi_hdr_ext_write)          (GstRTPBasePayload *payload, GstBuffer * rtp_buffer, GstBuffer * input_meta_buffer);
+
   /*< private >*/
   gpointer _gst_reserved[GST_PADDING];
 };
