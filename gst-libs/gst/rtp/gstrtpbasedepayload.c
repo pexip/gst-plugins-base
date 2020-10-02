@@ -961,9 +961,8 @@ set_headers (GstBuffer ** buffer, guint idx, GstRTPBaseDepayload * depayload)
     if (reader_roi_ext) {
       GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
       if (gst_rtp_buffer_map (priv->input_buffer, GST_MAP_READ, &rtp)) {
-        g_signal_emit (depayload,
-            gst_rtp_base_depayload_signals[SIGNAL_ROI_EXT_HDR_READ],
-            3, *buffer, &rtp, priv->roi_ext_id);
+        g_signal_emit_by_name (depayload, "roi-ext-hdr-read",
+            *buffer, &rtp, priv->roi_ext_id);
         gst_rtp_buffer_unmap (&rtp);
       }
     } else {

@@ -1640,11 +1640,9 @@ gst_rtp_base_payload_allocate_output_buffer (GstRTPBasePayload * payload,
     if (gst_buffer_get_n_meta (priv->input_meta_buffer, roi_info->api) > 0) {
       gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
       if (writer_roi_ext) {
-        g_signal_emit (payload,
-            gst_rtp_base_payload_signals[SIGNAL_ROI_EXT_HDR_WRITE],
-            3, priv->input_meta_buffer, &rtp, priv->roi_ext_id);
+        g_signal_emit_by_name (payload, "roi-ext-hdr-write",
+            priv->input_meta_buffer, &rtp, priv->roi_ext_id);
       } else {
-        gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
         gst_rtp_buffer_video_roi_meta_to_one_byte_ext (&rtp,
             priv->input_meta_buffer, priv->roi_ext_id);
       }
@@ -1654,16 +1652,15 @@ gst_rtp_base_payload_allocate_output_buffer (GstRTPBasePayload * payload,
 
   /* Add audio-level-ext */
   if (priv->input_meta_buffer && priv->audio_level_id > 0) {
-    GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
-    gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
     GstRTPAudioLevelMeta *audio_meta =
         gst_buffer_get_rtp_audio_level_meta (priv->input_meta_buffer);
     if (audio_meta != NULL) {
+      GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
+      gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
       gst_rtp_audio_level_meta_add_one_byte_ext (audio_meta, &rtp,
           priv->audio_level_id);
       gst_rtp_buffer_unmap (&rtp);
     }
-    gst_rtp_buffer_unmap (&rtp);
   }
 
   return buffer;

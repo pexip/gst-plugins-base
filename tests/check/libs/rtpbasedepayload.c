@@ -1626,8 +1626,9 @@ GST_START_TEST (rtp_base_depayload_roi_ext_id_test)
     }
     gst_buffer_unref (buffer);
   }
-
   fail_unless (custom_reader_called);
+
+  gst_buffer_unref (buffer_with_meta);
 
   /* Input buffer has extensionheader, depayloader should add meta for the
      right ID using default reader as we have disconnected the signal */
@@ -1658,7 +1659,6 @@ GST_START_TEST (rtp_base_depayload_roi_ext_id_test)
     }
     gst_buffer_unref (buffer);
   }
-
   fail_if (custom_reader_called);
 
   /* Property is disabled, depayloader should not add meta */
