@@ -1691,7 +1691,7 @@ GST_START_TEST (rtp_base_depayload_roi_ext_id_caps_test)
 {
   GstHarness *h;
   GstRtpDummyDepay *depay;
-  guint8 ext_id;
+  guint ext_id;
 
   depay = rtp_dummy_depay_new ();
   h = gst_harness_new_with_element (GST_ELEMENT_CAST (depay), "sink", "src");
