@@ -2106,7 +2106,7 @@ typedef struct
   guint h;
 } RoI;
 
-#define ROI_EXTMAP_STR "TBD"
+#define ROI_EXTMAP_STR "TBD:draft-ford-avtcore-roi-extension-00"
 #define ROI_EXT_ID 10
 
 static void

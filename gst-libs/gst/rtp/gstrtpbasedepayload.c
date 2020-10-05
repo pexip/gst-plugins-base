@@ -36,6 +36,8 @@
 GST_DEBUG_CATEGORY_STATIC (rtpbasedepayload_debug);
 #define GST_CAT_DEFAULT (rtpbasedepayload_debug)
 
+#define ROI_EXTMAP_STR "TBD:draft-ford-avtcore-roi-extension-00"
+
 struct _GstRTPBaseDepayloadPrivate
 {
   GstClockTime npt_start;
@@ -764,6 +766,30 @@ gst_rtp_base_depayload_handle_event (GstRTPBaseDepayload * filter,
   return res;
 }
 
+/* FIXME: move somewhere else */
+static guint8
+_get_extmap_id_for_attribute (const GstStructure * s, const gchar * ext_name)
+{
+  guint i;
+  guint8 extmap_id = 0;
+  guint n_fields = gst_structure_n_fields (s);
+
+  for (i = 0; i < n_fields; i++) {
+    const gchar *field_name = gst_structure_nth_field_name (s, i);
+    if (g_str_has_prefix (field_name, "extmap-")) {
+      const gchar *str = gst_structure_get_string (s, field_name);
+      if (str && g_strcmp0 (str, ext_name) == 0) {
+        gint64 id = g_ascii_strtoll (field_name + 7, NULL, 10);
+        if (id > 0 && id < 15) {
+          extmap_id = id;
+          break;
+        }
+      }
+    }
+  }
+  return extmap_id;
+}
+
 static gboolean
 gst_rtp_base_depayload_handle_sink_event (GstPad * pad, GstObject * parent,
     GstEvent * event)
@@ -771,9 +797,24 @@ gst_rtp_base_depayload_handle_sink_event (GstPad * pad, GstObject * parent,
   gboolean res = FALSE;
   GstRTPBaseDepayload *filter;
   GstRTPBaseDepayloadClass *bclass;
+  GstRTPBaseDepayloadPrivate *priv;
 
   filter = GST_RTP_BASE_DEPAYLOAD (parent);
   bclass = GST_RTP_BASE_DEPAYLOAD_GET_CLASS (filter);
+  priv = filter->priv;
+
+  /* parse sink-caps and extract extmap-<id>=ROI_EXTMAP_STR */
+  if (GST_EVENT_TYPE (event) == GST_EVENT_CAPS) {
+    GstCaps * caps;
+    GstStructure * s;
+    guint8 ext_id;
+    gst_event_parse_caps (event, &caps);
+    s = gst_caps_get_structure (caps, 0);
+    ext_id = _get_extmap_id_for_attribute (s, ROI_EXTMAP_STR);
+    if (ext_id > 0)
+      priv->roi_ext_id = ext_id;
+  }
+
   if (bclass->handle_event)
     res = bclass->handle_event (filter, event);
   else

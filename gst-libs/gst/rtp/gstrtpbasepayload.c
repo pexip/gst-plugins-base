@@ -1240,7 +1240,7 @@ gst_rtp_base_payload_negotiate (GstRTPBasePayload * payload)
   if (payload->priv->roi_ext_id > 0) {
     _set_caps_from_ext_id (srccaps,
         payload->priv->roi_ext_id,
-        "TBD");
+        "TBD:draft-ford-avtcore-roi-extension-00");
   }
 
   res = gst_pad_set_caps (GST_RTP_BASE_PAYLOAD_SRCPAD (payload), srccaps);

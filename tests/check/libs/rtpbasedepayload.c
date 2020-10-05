@@ -1683,6 +1683,47 @@ GST_START_TEST (rtp_base_depayload_roi_ext_id_test)
 
 GST_END_TEST;
 
+#define ROI_EXTMAP_STR "TBD:draft-ford-avtcore-roi-extension-00"
+
+/* Test roi-ext-id is set when ext-<id>=ROI_EXTMAP_STR
+ * mapping is seen on the sink-caps. */
+GST_START_TEST (rtp_base_depayload_roi_ext_id_caps_test)
+{
+  GstHarness *h;
+  GstRtpDummyDepay *depay;
+  guint8 ext_id;
+
+  depay = rtp_dummy_depay_new ();
+  h = gst_harness_new_with_element (GST_ELEMENT_CAST (depay), "sink", "src");
+  gst_harness_set_src_caps_str (h, "application/x-rtp");
+
+  /* default, roi-ext-id is unset */
+  g_object_get (depay, "roi-ext-id", &ext_id, NULL);
+  fail_unless_equals_int (0, ext_id);
+
+  /* set src-caps to include ext-id mapping */
+  gst_harness_set_src_caps_str (h, "application/x-rtp, "
+      "extmap-10=" ROI_EXTMAP_STR "");
+  g_object_get (depay, "roi-ext-id", &ext_id, NULL);
+  fail_unless_equals_int (10, ext_id);
+
+  /* set src-caps to include ext-id mapping */
+  gst_harness_set_src_caps_str (h, "application/x-rtp, "
+      "extmap-5=" ROI_EXTMAP_STR "");
+  g_object_get (depay, "roi-ext-id", &ext_id, NULL);
+  fail_unless_equals_int (5, ext_id);
+
+  /* removing extmap from caps, keeps last value */
+  gst_harness_set_src_caps_str (h, "application/x-rtp");
+  g_object_get (depay, "roi-ext-id", &ext_id, NULL);
+  fail_unless_equals_int (5, ext_id);
+
+  g_object_unref (depay);
+  gst_harness_teardown (h);
+}
+
+GST_END_TEST;
+
 /* Test max-reorder property. Reordered packets with a gap less than
  * max-reordered will be dropped, reordered packets with gap larger than
  * max-reorder is considered coming fra a restarted sender and should not be
@@ -1819,6 +1860,7 @@ rtp_basepayloading_suite (void)
   tcase_add_test (tc_chain, rtp_base_depayload_source_info_from_rtp_only);
   tcase_add_test (tc_chain, rtp_base_depayload_audio_level_id_test);
   tcase_add_test (tc_chain, rtp_base_depayload_roi_ext_id_test);
+  tcase_add_test (tc_chain, rtp_base_depayload_roi_ext_id_caps_test);
   tcase_add_test (tc_chain, rtp_base_depayload_max_reorder);
 
   tcase_add_test (tc_chain, rtp_base_depayload_flow_return_push_func);
