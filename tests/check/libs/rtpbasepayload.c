@@ -2111,12 +2111,12 @@ typedef struct
 
 static void
 _write_roi_hdr_ext (gpointer * user_data, GstBuffer * input_meta_buffer,
-    GstBuffer * rtp_buffer, gint ext_id)
+    GstRTPBuffer * rtp_buffer, guint ext_id)
 {
   gboolean *called;
 
   fail_unless (input_meta_buffer);
-  fail_unless ((GstRTPBuffer *) rtp_buffer);
+  fail_unless (rtp_buffer);
   fail_unless (user_data);
   fail_unless_equals_int (ext_id, ROI_EXT_ID);
 

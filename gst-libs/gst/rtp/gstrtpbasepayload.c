@@ -439,7 +439,7 @@ gst_rtp_base_payload_class_init (GstRTPBasePayloadClass * klass)
   gst_rtp_base_payload_signals[SIGNAL_ROI_EXT_HDR_WRITE] =
       g_signal_new ("roi-ext-hdr-write", G_TYPE_FROM_CLASS (klass),
       G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_generic,
-      G_TYPE_NONE, 3, G_TYPE_POINTER, G_TYPE_POINTER, G_TYPE_INT);
+      G_TYPE_NONE, 3, GST_TYPE_BUFFER, G_TYPE_POINTER, G_TYPE_UINT);
 
   gstelement_class->change_state = gst_rtp_base_payload_change_state;
 
@@ -1239,8 +1239,7 @@ gst_rtp_base_payload_negotiate (GstRTPBasePayload * payload)
 
   if (payload->priv->roi_ext_id > 0) {
     _set_caps_from_ext_id (srccaps,
-        payload->priv->roi_ext_id,
-        "TBD:draft-ford-avtcore-roi-extension-00");
+        payload->priv->roi_ext_id, "TBD:draft-ford-avtcore-roi-extension-00");
   }
 
   res = gst_pad_set_caps (GST_RTP_BASE_PAYLOAD_SRCPAD (payload), srccaps);
@@ -1645,8 +1644,9 @@ gst_rtp_base_payload_allocate_output_buffer (GstRTPBasePayload * payload,
     if (gst_buffer_get_n_meta (priv->input_meta_buffer, roi_info->api) > 0) {
       gst_rtp_buffer_map (buffer, GST_MAP_READWRITE, &rtp);
       if (writer_roi_ext) {
-        g_signal_emit_by_name (payload, "roi-ext-hdr-write",
-            priv->input_meta_buffer, &rtp, priv->roi_ext_id);
+        g_signal_emit (payload,
+            gst_rtp_base_payload_signals[SIGNAL_ROI_EXT_HDR_WRITE], 0,
+            priv->input_meta_buffer, &rtp, (guint) priv->roi_ext_id);
       } else {
         gst_rtp_buffer_video_roi_meta_to_one_byte_ext (&rtp,
             priv->input_meta_buffer, priv->roi_ext_id);

@@ -278,7 +278,7 @@ gst_rtp_base_depayload_class_init (GstRTPBaseDepayloadClass * klass)
   gst_rtp_base_depayload_signals[SIGNAL_ROI_EXT_HDR_READ] =
       g_signal_new ("roi-ext-hdr-read", G_TYPE_FROM_CLASS (klass),
       G_SIGNAL_RUN_LAST, 0, NULL, NULL, g_cclosure_marshal_generic,
-      G_TYPE_NONE, 3, G_TYPE_POINTER, G_TYPE_POINTER, G_TYPE_INT);
+      G_TYPE_NONE, 3, GST_TYPE_BUFFER, G_TYPE_POINTER, G_TYPE_UINT);
 
   gstelement_class->change_state = gst_rtp_base_depayload_change_state;
 
@@ -805,8 +805,8 @@ gst_rtp_base_depayload_handle_sink_event (GstPad * pad, GstObject * parent,
 
   /* parse sink-caps and extract extmap-<id>=ROI_EXTMAP_STR */
   if (GST_EVENT_TYPE (event) == GST_EVENT_CAPS) {
-    GstCaps * caps;
-    GstStructure * s;
+    GstCaps *caps;
+    GstStructure *s;
     guint8 ext_id;
     gst_event_parse_caps (event, &caps);
     s = gst_caps_get_structure (caps, 0);
@@ -1001,7 +1001,8 @@ set_headers (GstBuffer ** buffer, guint idx, GstRTPBaseDepayload * depayload)
     if (reader_roi_ext) {
       GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
       if (gst_rtp_buffer_map (priv->input_buffer, GST_MAP_READ, &rtp)) {
-        g_signal_emit_by_name (depayload, "roi-ext-hdr-read",
+        g_signal_emit (depayload,
+            gst_rtp_base_depayload_signals[SIGNAL_ROI_EXT_HDR_READ], 0,
             *buffer, &rtp, priv->roi_ext_id);
         gst_rtp_buffer_unmap (&rtp);
       }
