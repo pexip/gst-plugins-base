@@ -2252,6 +2252,46 @@ GST_START_TEST (rtp_base_payload_property_roi_ext_id_test)
 
 GST_END_TEST;
 
+GST_START_TEST (rtp_base_payload_handle_gap_event)
+{
+  State *state;
+  guint32 rtptime;
+  guint16 seq;
+
+  state = create_payloader ("application/x-rtp", &sinktmpl,
+      "handle-gap-event", TRUE, NULL);
+
+  set_state (state, GST_STATE_PLAYING);
+
+  /* Push 2 buffers with a gap event in between */
+  push_buffer (state, "pts", 0 * GST_SECOND, NULL);
+
+  fail_unless (gst_pad_push_event (state->srcpad,
+          gst_event_new_gap (1 * GST_SECOND, GST_SECOND)));
+
+  push_buffer (state, "pts", 2 * GST_SECOND, NULL);
+
+  set_state (state, GST_STATE_NULL);
+
+  /* Expect 2 RTP buffers out, with a sequence number gap = 1 */
+  validate_buffers_received (2);
+
+  validate_buffer (0, "pts", 0 * GST_SECOND, NULL);
+  get_buffer_field (0, "rtptime", &rtptime, "seq", &seq, NULL);
+
+  validate_buffer (1,
+      "pts", 2 * GST_SECOND,
+      "rtptime", rtptime + 2 * DEFAULT_CLOCK_RATE, "seq", seq + 2, NULL);
+
+  validate_events_received (3);
+
+  validate_normal_start_events (0);
+
+  destroy_payloader (state);
+}
+
+GST_END_TEST;
+
 static Suite *
 rtp_basepayloading_suite (void)
 {
@@ -2294,6 +2334,7 @@ rtp_basepayloading_suite (void)
   tcase_add_test (tc_chain, rtp_base_payload_max_framerate_attribute);
 
   tcase_add_test (tc_chain, rtp_base_payload_segment_time);
+  tcase_add_test (tc_chain, rtp_base_payload_handle_gap_event);
 
 
   return s;

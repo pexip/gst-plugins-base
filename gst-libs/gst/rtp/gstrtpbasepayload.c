@@ -45,6 +45,8 @@ struct _GstRTPBasePayloadPrivate
   gboolean perfect_rtptime;
   gint notified_first_timestamp;
 
+  gboolean handle_gap_event;
+
   gboolean pt_set;
 
   gboolean source_info;
@@ -104,6 +106,7 @@ static guint gst_rtp_base_payload_signals[LAST_SIGNAL] = { 0 };
 #define DEFAULT_ROI_EXT_ID              0
 #define DEFAULT_SCALE_RTPTIME           TRUE
 #define DEFAULT_AUDIO_LEVEL_ID          0
+#define DEFAULT_HANDLE_GAP_EVENT        FALSE
 
 enum
 {
@@ -126,6 +129,7 @@ enum
   PROP_ROI_EXT_ID,
   PROP_SCALE_RTPTIME,
   PROP_AUDIO_LEVEL_ID,
+  PROP_HANDLE_GAP_EVENT,
   PROP_LAST
 };
 
@@ -427,6 +431,12 @@ gst_rtp_base_payload_class_init (GstRTPBasePayloadClass * klass)
           0, 14, DEFAULT_AUDIO_LEVEL_ID,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (G_OBJECT_CLASS (klass),
+      PROP_HANDLE_GAP_EVENT, g_param_spec_boolean ("handle-gap-event",
+          "Handle GAP event", "Creates a gap in sequence numbers on GAP event",
+          DEFAULT_HANDLE_GAP_EVENT,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   /**
    * GstRTPBasePayload::roi-ext-hdr-write
    * @object: the #GstRTPBasePayload
@@ -503,6 +513,7 @@ gst_rtp_base_payload_init (GstRTPBasePayload * rtpbasepayload, gpointer g_class)
   rtpbasepayload->priv->base_rtime_hz = GST_BUFFER_OFFSET_NONE;
   rtpbasepayload->priv->onvif_no_rate_control = DEFAULT_ONVIF_NO_RATE_CONTROL;
   rtpbasepayload->priv->scale_rtptime = DEFAULT_SCALE_RTPTIME;
+  rtpbasepayload->priv->handle_gap_event = DEFAULT_HANDLE_GAP_EVENT;
 
   rtpbasepayload->media = NULL;
   rtpbasepayload->encoding_name = NULL;
@@ -600,6 +611,17 @@ gst_rtp_base_payload_sink_event_default (GstRTPBasePayload * rtpbasepayload,
           "configured SEGMENT %" GST_SEGMENT_FORMAT, segment);
       if (rtpbasepayload->priv->delay_segment) {
         gst_event_replace (&rtpbasepayload->priv->pending_segment, event);
+        gst_event_unref (event);
+        res = TRUE;
+      } else {
+        res = gst_pad_event_default (rtpbasepayload->sinkpad, parent, event);
+      }
+      break;
+    }
+    case GST_EVENT_GAP:
+    {
+      if (rtpbasepayload->priv->handle_gap_event) {
+        ++rtpbasepayload->priv->next_seqnum;
         gst_event_unref (event);
         res = TRUE;
       } else {
@@ -1760,6 +1782,9 @@ gst_rtp_base_payload_set_property (GObject * object, guint prop_id,
     case PROP_AUDIO_LEVEL_ID:
       priv->audio_level_id = g_value_get_uint (value);
       break;
+    case PROP_HANDLE_GAP_EVENT:
+      priv->handle_gap_event = g_value_get_boolean (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -1841,6 +1866,9 @@ gst_rtp_base_payload_get_property (GObject * object, guint prop_id,
       break;
     case PROP_AUDIO_LEVEL_ID:
       g_value_set_uint (value, priv->audio_level_id);
+      break;
+    case PROP_HANDLE_GAP_EVENT:
+      g_value_set_boolean (value, priv->handle_gap_event);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
