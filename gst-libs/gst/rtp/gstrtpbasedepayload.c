@@ -82,7 +82,7 @@ enum
 
 static guint gst_rtp_base_depayload_signals[LAST_SIGNAL] = { 0 };
 
-#define DEFAULT_IGNORE_GAPS FALSE
+#define DEFAULT_IGNORE_GAPS TRUE
 #define DEFAULT_SOURCE_INFO FALSE
 #define DEFAULT_AUDIO_LEVEL_ID 0
 #define DEFAULT_ROI_EXT_ID 0
